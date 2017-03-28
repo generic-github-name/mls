@@ -167,6 +167,9 @@ all_matches = unique(all_matches)
 # order by date/home team
 all_matches = all_matches[order(date, team_home)]
 
+# drop missing values
+all_matches = all_matches[!is.na(score_away) & !is.na(score_home) & !is.na(date)]
+
 # archive old data
 file.copy(from=outFile, to=gsub('.csv', paste0(today, '.csv'), outFile), overwrite=TRUE)
 
