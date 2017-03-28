@@ -1,14 +1,38 @@
 # Scrape mlssoccer.com for historical w/l/d data
 # output files saved in the current working directory
 
-# set up R
+# ------------------------------
+# Set up R
 rm(list=ls())
 library(data.table)
 library(stringr)
 library(rvest)
 library(httr) # for "use_proxy"
+# ------------------------------
 
-# create a function to scrape
+
+# -----------------------------------------------------------------------------
+# Files and Settings
+
+# output file
+outFile = './webscrape/all_matches_in_mls_website.csv'
+
+# whether to re-scrape everything or just update all clubs in the current year
+reScrapeAll = FALSE
+
+# ranges to loop over (if they haven't been scraped already if reScrapeAll==FALSE)
+# team number 342 (Curacao) seems to be the most recently-added team to MLS's internal database 
+# this presumably means that there's at least one year in which each team from 1 to 342 has data
+year_range = seq(1996, 2017)
+club_range = seq(342) 
+
+# store today's date
+today = Sys.Date()
+# -----------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------------------
+# Create a function to scrape
 mlsScraper = function(year, club) {
 
 	# scrape
@@ -71,31 +95,58 @@ mlsScraper = function(year, club) {
 	# return matches
 	return(matches)
 }
+# ------------------------------------------------------------------------------------------
 
-# loop over years/clubs (even ones that don't exist) and save individually b/c it takes forever
-year_range = seq(2010, 2017)
-club_range = seq(342) # team number 342 (Curacao) seems to be the most recently-added team to MLS's internal database this presumably means that there's at least one year in which each team from 1 to 342 has data
+
+
+# ---------------------------------------------------------------------------------------
+# Loop over years/clubs (even ones that don't exist) and save individually
+
+# print for user
 print(paste('Scraping data from years:', paste(year_range, collapse=' ')))
 print(paste('Scraping data from clubs:', paste(club_range, collapse=' ')))
 cat('Percent complete: ')
+
+# set up to loop
 i=0
 I = length(year_range)*length(club_range)
 prev_pct = 0
+
+# loop over years and clubs
 for(y in year_range) {
 	for(c in club_range) {
 		i = i+1
+		cyOutFile = paste0('./webscrape/club_years/', c, '_', y, '.csv')
+		
+		# only scrape new club-years if specified (always scrape this year)
+		if (!reScrapeAll & file.exists(cyOutFile) & y<year(today)) next
+		
+		# scrape
 		matches = suppressWarnings(mlsScraper(y, c))
-		if (is.null(matches)) next
-		outFile = paste0('./club_years/', c, '_', y, '.csv')
-		write.csv(matches, outFile, row.names=FALSE)
+		
+		# if the club-year doesn't exist, save it anyway so we know not to try again
+		if (is.null(matches)) {
+			matches = data.table(team_away=numeric(), team_home=numeric(), 
+								score_away=numeric(), score_home=numeric(), 
+								competition=numeric(), date=numeric(), winner=numeric())
+		}
+		
+		# save club-year
+		write.csv(matches, cyOutFile, row.names=FALSE)
+		
+		# report to user
 		pct_done = floor(i/I*100)
 		if (pct_done!=prev_pct) cat(paste0(pct_done, '% '))
 		prev_pct = pct_done
 	}
 }
+# ---------------------------------------------------------------------------------------
 
-# append all files
-all_matches = fread('./all_matches_in_mls_website_1996-2009.csv') # append to existing file because I only started saving club-year files after I had already scraped 1996-2009
+
+# -----------------------------------------------------------
+# Append all files
+
+# loop over club-years and append
 for(y in year_range) {
 	for(c in club_range) {
 		inFile = paste0('./club_years/', c, '_', y, '.csv')
@@ -104,6 +155,11 @@ for(y in year_range) {
 		all_matches = rbind(all_matches, matches, fill=TRUE)
 	}
 }
+# -----------------------------------------------------------
+
+
+# --------------------------------------------------------------------------------------
+# Save
 
 # drop duplicates
 all_matches = unique(all_matches)
@@ -111,5 +167,9 @@ all_matches = unique(all_matches)
 # order by date/home team
 all_matches = all_matches[order(date, team_home)]
 
+# archive old data
+file.copy(from=outFile, to=gsub('.csv', paste0(today, '.csv'), outFile), overwrite=TRUE)
+
 # save data
-write.csv(all_matches, './all_matches_in_mls_website.csv', row.names=FALSE)
+write.csv(all_matches, outFile, row.names=FALSE)
+# --------------------------------------------------------------------------------------
