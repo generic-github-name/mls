@@ -12,9 +12,9 @@ library(ggplot2)
 
 # --------------------------------------------------------
 # input/output files
-inFile = '../mls_webscrape/all_matches_in_mls_website.csv'
+inFile = './webscrape/all_matches_in_mls_website.csv'
 outFile = './home_field_advnatage_graphs_2012_plus.pdf'
-source('../home_field_advantage/formalize_team_names.r')
+source('./home_field_advantage/formalize_team_names.r')
 # --------------------------------------------------------
 
 
@@ -172,6 +172,11 @@ p3 = ggplot(percentages, aes(y=ratio, x=reorder(team, -ratio))) +
 glmFit = glm(win ~ ma + home:team, family='binomial', data=analysisData)
 summary(glmFit)
 
+analysisData[home==1, away:=0]
+analysisData[home==0, away:=1]
+glmFita = glm(win ~ ma + away:team, family='binomial', data=analysisData)
+summary(glmFita)
+
 # prep estimates
 estimates = data.table(exp(cbind(coef(glmFit), confint(glmFit))))
 setnames(estimates, names(estimates), c('est', 'lower', 'upper'))
@@ -180,6 +185,15 @@ estimates[grepl('ma', coef), variable:='ma']
 estimates[grepl('home', coef), variable:='home']
 estimates[, team:=gsub('team', '', coef)]
 estimates[, team:=gsub('home:', '', team)]
+
+# prep away estimates
+estimatesa = data.table(exp(cbind(coef(glmFita), confint(glmFita))))
+setnames(estimatesa, names(estimatesa), c('est', 'lower', 'upper'))
+estimatesa[, coef:=names(coef(glmFita))]
+estimatesa[grepl('ma', coef), variable:='ma']
+estimatesa[grepl('away', coef), variable:='away']
+estimatesa[, team:=gsub('team', '', coef)]
+estimatesa[, team:=gsub('away:', '', team)]
 
 # current teams
 currentEstimates = estimates[team %in% currentTeams]
