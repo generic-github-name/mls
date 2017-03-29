@@ -11,7 +11,7 @@ library(ggplot2)
 
 # --------------------------------------------------------
 # input/output files
-inFile = './mls_webscrape/all_matches_in_mls_website.csv'
+inFile = './webscrape/all_matches_in_mls_website.csv'
 outFile = './historical_trends/graphs.pdf'
 source('./home_field_advantage/formalize_team_names.r')
 # --------------------------------------------------------
@@ -78,6 +78,15 @@ analysisData[, game_number:=seq_along(win), by='team']
 cummean = function(x) cumsum(x) / seq_along(x)
 analysisData[, cumulative_mean_pct:=cummean(win), by='team']
 analysisData[, cumulative_mean_points:=cummean(points), by='team']
+
+# look at draws
+t = table(analysisData[year(date)>=2000,c('team','wld'),with=F]))
+t = dcast.data.table(t, team~wld)
+t[, total:=draw+loss+win]
+t[, draw:=draw/total]
+t[, loss:=loss/total]
+t[, win:=win/total]
+t[order(draw)]
 
 # reference team
 glmData = copy(analysisData)
