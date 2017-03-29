@@ -143,22 +143,25 @@ for(y in year_range) {
 # ---------------------------------------------------------------------------------------
 
 
-# -----------------------------------------------------------
+# ---------------------------------------------------------------------
 # Append all files
 
 # loop over club-years and append
+i=1
 for(y in year_range) {
 	for(c in club_range) {
-		inFile = paste0('./club_years/', c, '_', y, '.csv')
+		inFile = paste0('./webscrape//club_years/', c, '_', y, '.csv')
 		if (!file.exists(inFile)) next
 		matches = fread(inFile)
-		all_matches = rbind(all_matches, matches, fill=TRUE)
+		if (i==1) all_matches = matches
+		if (i>1) all_matches = rbind(all_matches, matches, fill=TRUE)
+		i=i+1
 	}
 }
-# -----------------------------------------------------------
+# ---------------------------------------------------------------------
 
 
-# --------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------
 # Save
 
 # drop duplicates
@@ -171,8 +174,10 @@ all_matches = all_matches[order(date, team_home)]
 all_matches = all_matches[!is.na(score_away) & !is.na(score_home) & !is.na(date)]
 
 # archive old data
-file.copy(from=outFile, to=gsub('.csv', paste0(today, '.csv'), outFile), overwrite=TRUE)
+archiveFile = gsub('.csv', paste0(today, '.csv'), outFile)
+archiveFile = gsub('webscrape', 'webscrape/archive', archiveFile)
+file.copy(from=outFile, to=archiveFile, overwrite=TRUE)
 
 # save data
 write.csv(all_matches, outFile, row.names=FALSE)
-# --------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------
