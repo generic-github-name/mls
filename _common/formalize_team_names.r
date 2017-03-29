@@ -1,7 +1,11 @@
-# team names
+# Replace mlssoccer.com standard team names with more formal names
+# Input: dt (data.table) : data.table containing variables to replace
+# Output: tmp (data.table) : data.table with variables replaced
+# Variables that get replaced are specified in object 'vars'
 formalizeTeamNames = function(dt) { 
 	tmp = copy(dt)
-	for (var in c('team', 'team_away', 'team_home', 'winner')) {
+	vars = c('team', 'team_away', 'team_home', 'winner')
+	for (var in vars) {
 		if (!var %in% names(dt)) next
 		tmp[, tmpVar:=get(var)]
 		tmp[tmpVar=='san-jose', tmpVar:='San Jose']
