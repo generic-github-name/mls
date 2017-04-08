@@ -31,6 +31,8 @@ formalizeTeamNames = function(dt) {
 		tmp[tmpVar=='montreal', tmpVar:='Montreal']
 		tmp[tmpVar=='orlando', tmpVar:='Orlando']
 		tmp[tmpVar=='nycfc', tmpVar:='NYCFC']
+		tmp[tmpVar=='atlanta', tmpVar:='Atlanta United']
+		tmp[tmpVar=='minnesota', tmpVar:='Minnesota United']
 		tmp[, (var):=tmpVar]
 		tmp$tmpVar = NULL
 	}
