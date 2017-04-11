@@ -1,9 +1,5 @@
-# -------------------------------------------------------------------------
-# David Phillips
-#
 # Analyze ref bias
 # outcomes: cards given and pks against, analyses: does salazar (repeat for others) give more cards to some teams than others? and does he give more cards than other refs?
-# -------------------------------------------------------------------------
 
 
 # --------------------
@@ -26,7 +22,7 @@ inFile = './webscrape/boxscores_for_every_match.csv'
 matchFile = './webscrape/all_matches_in_mls_website.csv'
 
 # output file
-outFile = './refs/graphs.phd'
+outFile = './refs/graphs.pdf'
 
 # formalization function
 source('./_common/formalize_team_names.r')
