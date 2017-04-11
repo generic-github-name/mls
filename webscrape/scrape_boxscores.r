@@ -1,6 +1,13 @@
 # Scrape mlssoccer.com for historical w/l/d data
 # output files saved in the current working directory
 
+# to do
+# reformat pks to be pk_minutes and have 3 "slots" for every player
+# reformat goal_minutes to have 4 "slots" for every player
+# create "subbed_in" variable for minute every player entered the game (0 for starter)
+# create "subbed_out" variable for minute every player exited the game
+
+
 # ------------------------------
 # Set up R
 rm(list=ls())
@@ -47,12 +54,12 @@ lineupScraper = function(th, ta, date) {
 	if (test==TRUE) return(NULL)
 	
 	# scrape player list
-	players_scr = htmlpage %>%  
+	player_scr = htmlpage %>%  
 		html_nodes('.ps-name') %>% 
 		html_nodes(xpath = './a')
 
 	# if the current year/club doesn't exist, return nothing
-	if (length(players_scr)==0) return(NULL) 
+	if (length(player_scr)==0) return(NULL) 
 
 	# scrape table by column
 	positions_scr = htmlpage %>%  
@@ -88,11 +95,14 @@ lineupScraper = function(th, ta, date) {
 	goaldets_scr = htmlpage %>%  
 		html_nodes('.bx-goals td') 
 
-	cards_scr = htmlpage %>%  
-		html_nodes('.bx-bookings .pi-target') 
+	subs_scr = htmlpage %>%  
+		html_nodes('.bx-subs td')
 
-	card_colors_scr = htmlpage %>%  
-		html_nodes('.bx-icon') 
+	cards_scr = htmlpage %>%  
+		html_nodes('.bx-bookings td') 
+	
+	stadium_scr = htmlpage %>%  
+		html_nodes('.match-info div:nth-child(1)') 
 
 	attendance_scr = htmlpage %>%  
 		html_nodes('.match-info div:nth-child(2)') 
@@ -103,24 +113,19 @@ lineupScraper = function(th, ta, date) {
 	# scrape refs/managers from different page
 	url = paste0('http://matchcenter.mlssoccer.com/matchcenter/', date, '-', th, '-vs-', ta, '/lineup')
 	proxy.string = use_proxy("")
-	htmlpage = html_session(url, proxy.string)
+	htmlpagelineup = html_session(url, proxy.string)
 
-	refs_scr = htmlpage %>%  
+	refs_scr = htmlpagelineup %>%  
 		html_nodes('tbody:nth-child(1)') %>% 
 		html_nodes('.name:nth-child(4)')
 
-	managers_scr = htmlpage %>%  
+	managers_scr = htmlpagelineup %>%  
 		html_nodes('.manager-table .name')
 	
-	# format players
-	players = as.character(players_scr)
-	players = do.call('rbind', str_split(players,'>|<'))[,3]
-	# players = gsub('<a href=\"//www.mlssoccer.com/player/', '', players)
-	# players = gsub('\" target=\"_blank\" data-reactid=\"', '', players)
-	# players = gsub('\">', '', players)
-	# players = gsub('</a>', '', players)
-	# for(i in 0:9) players = gsub(i, '', players)
-	if (all(is.na(players))) return(NULL) 
+	# format player
+	player = as.character(player_scr)
+	player = do.call('rbind', str_split(player,'>|<'))[,3]
+	if (all(is.na(player))) return(NULL) 
 	
 	# format stat table columns
 	cols = c('positions_scr', 'minutes_scr', 'goals_scr', 'assists_scr', 'shots_scr', 
@@ -141,48 +146,47 @@ lineupScraper = function(th, ta, date) {
 		assign(colname, tmpCol)
 	}
 	
-	# format goal details
-	goaldets = as.character(goaldets_scr)
-	goaldets = do.call('rbind', str_split(goaldets,'>|<'))
-	goaldets = data.table(goaldets[,c(3,5,9)])
-	if (nrow(goaldets)>0) { 
-		goaldets[, minute:=shift(V1,2)]
-		goaldets = goaldets[V2!='' & V2!='\n']
-		goaldets$V1 = NULL
-		setnames(goaldets, c('V2','V3'), c('players','pk'))
-		goaldets[, pk:=ifelse(pk==' (PK)', '1', '0')]
-		goaldets[, minute:=gsub('\'','',minute)]
-		goaldets[, id:=seq_len(.N),by='players']
-		goaldets = dcast.data.table(goaldets,players~id, value.var=c('pk','minute'))
-		minuteVars = names(goaldets)[grepl('minute', names(goaldets))]
-		# reformat minutes and pks as comma separated lists
-		goaldets[, goal_minutes:=get(minuteVars[1])]
-		if(length(minuteVars)>1) {
-			for(m in minuteVars[2:length(minuteVars)]) {
-				goaldets[, goal_minutes:=paste(goal_minutes, get(m), sep=', '), by='players']
-			}
-		}
-		pkVars = names(goaldets)[grepl('pk', names(goaldets))]
-		goaldets[, pks:=get(pkVars[1])]
-		if(length(pkVars)>1) {
-			for(p in pkVars[2:length(pkVars)]) {
-				goaldets[, pks:=paste(pks, get(p), sep=', '), by='players']
-			}
-		}
-		goaldets = goaldets[, c('players','goal_minutes','pks'), with=FALSE]
+	# formax goal details
+	if(sum(goals)==0) goaldets = data.table(player=as.character(NA), goal_1=as.character(NA), pk_1=as.character(NA))
+	if (sum(goals)>0) {
+		goaldets = as.character(goaldets_scr)
+		goaldets = data.table(do.call('rbind', str_split(goaldets, '>|<')))
+		goaldets = goaldets[, c('V3','V5','V9'), with=FALSE]
+		goaldets[, V3:=shift(V3,2)]
+		goaldets = goaldets[!V5 %in% c('','\n')]
+		setnames(goaldets, names(goaldets), c('goal','player','pk'))
+		goaldets[, id:=seq_len(.N),by='player']
+		goaldets = dcast.data.table(goaldets, player~id, value.var=c('goal','pk'))
+		for(v in names(goaldets)[grepl('pk',names(goaldets))]) goaldets[, (v):=ifelse(get(v)==' (PK)', get(gsub('pk', 'goal', v)), NA)]
 	}
-	if (nrow(goaldets)==0) goaldets = data.table(players=as.character(NA), goal_minutes=as.character(NA), pks=as.character(NA))
 	
-	# format cards
+	# format subs
+	subs = as.character(subs_scr)
+	subs = data.table(do.call('rbind', str_split(subs, '>|<')))
+	subs = subs[, c('V3','V11','V27'), with=FALSE]
+	subs[, V3:=shift(V3,2)]
+	subs = subs[!V11 %in% c('','\n')]
+	setnames(subs, names(subs), c('minute','subbed_in','subbed_out'))
+	subs = dcast.data.table(melt(subs, id.vars='minute', value.name='player'), player~variable, value.var='minute')
+	
+	# format cards WHAT IF THERE ARE 0 CARDS?
 	cards = as.character(cards_scr)
-	cards = gsub('<span class=\"nodelay pi-target\" data-reactid=\"', '', cards)
-	cards = do.call('rbind', str_split(cards,'>|<'))[,2]
+	if (length(cards)>0) { 
+		cards = data.table(do.call('rbind', str_split(cards, '>|<|=')))
+		cards = cards[, c('V5','V7','V9'), with=FALSE]
+		cards[, V5:=shift(V5,3)]
+		cards[, V7:=shift(V7)]
+		cards = cards[!V9 %in% c('','td class')]
+		cards[, V7:=gsub('"bx-booking-icon bx-','', V7)]
+		cards[, V7:=gsub('" data-reactid','', V7)]
+		setnames(cards, names(cards), c('minute','card','player'))
+		cards = dcast.data.table(cards, player~card, value.var='minute')
+	}
+	if (length(cards)==0) cards = data.table(player=as.character(NA), yellow=as.character(NA))
 	
-	# format card colors
-	card_colors = as.character(card_colors_scr)
-	card_colors = do.call('rbind', str_split(card_colors,'>|<'))[,4]
-	card_colors = do.call('rbind', str_split(card_colors,'\"'))[,2]
-	card_colors = gsub('bx-booking-icon bx-', '', card_colors)
+	# format stadium
+	stadium = as.character(stadium_scr)
+	stadium = str_split(stadium,'-->|<!--')[[1]][11]
 	
 	# format attendance
 	attendance = as.character(attendance_scr)
@@ -210,25 +214,19 @@ lineupScraper = function(th, ta, date) {
 	
 	# format current match data
 	currMatch = data.table(team_home=th, team_away=ta, 'date'=date, 
-		players=players, positions=positions, minutes=minutes, goals=goals, assists=assists, shots=shots, 
+		player=player, positions=positions, minutes=minutes, goals=goals, assists=assists, shots=shots, 
 		sog=sog, corners=corners, offsides=offsides, fouls=fouls, fouled=fouled, 
 		attendance=attendance, weather=weather, ref1=refs[1], ref2=refs[2], ref3=refs[3], ref4=refs[4], 
-		manager_home=managers[1], manager_away=managers[2])
+		manager_home=managers[1], manager_away=managers[2], stadium=stadium)
 	
-	# identify players' teams. it goes 16 home, 16 away, 2 home (gk) 2 away WHAT IF THERES NO GK ON THE BENCH???
+	# identify player' teams. it goes 16 home, 16 away, 2 home (gk) 2 away WHAT IF THERES NO GK ON THE BENCH???
 	team = c(rep(th, 16), rep(ta, 16), rep(th, 2), rep(ta, 2))
 	currMatch[, team:=team]
 	
-	# add cards (after adding teams so it doesn't mess up the order)
-	if (!is.null(cards) & !is.null(card_colors)) {
-		cards = data.table(players=cards, card=card_colors)
-	} else {
-		cards = data.table(players=as.character(NA), card=as.character(NA))
-	}
-	currMatch = merge(currMatch, cards, by='players', all.x=TRUE)
-	
-	# add goal details
-	currMatch = merge(currMatch, goaldets, by='players', all.x=TRUE)
+	# add goal details, cards and subs
+	currMatch = merge(currMatch, goaldets, by='player', all.x=TRUE)
+	currMatch = merge(currMatch, cards, by='player', all.x=TRUE)
+	currMatch = merge(currMatch, subs, by='player', all.x=TRUE)
 	
 	# return matches
 	return(currMatch)
