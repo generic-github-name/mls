@@ -42,6 +42,16 @@ data = data[competition %in% comps]
 teams = unique(data[year(date)==2016]$team_home)
 data = data[team_home %in% teams & team_away %in% teams]
 
+# foul differentials (fouls suffered doesn't always equal fouls committed by the opposing team)
+fds = data[, c('team_home','team_away','team', 'fouls', 'fouled', 'date'), with=FALSE]
+oppositionFouls = copy(fds)
+oppositionFouls[, team:=ifelse(team==team_home, team_away, team_home)]
+fds = fds[, list(fouls=sum(fouls, na.rm=TRUE)), by=c('team','date')]
+oppositionFouls = oppositionFouls[, list(fouled=sum(fouls, na.rm=TRUE)), by=c('team','date')]
+fds = merge(fds, oppositionFouls, by=c('team','date'))
+fds = fds[, foul_differential:=fouls-fouled]
+fd_means = fds[, list(mean_fd=mean(foul_differential, na.rm=TRUE)), by='team']
+
 # separate pks to identify the teams who committed them
 pks = data[, c('team_home','team_away','team','pk_1','pk_2','pk_3','pk_4'), with=FALSE]
 pks[, team:=ifelse(team==team_home, team_away, team_home)]
@@ -173,6 +183,25 @@ freqs[, fouls_rank:=rank(-fouls_rate)]
 freqs[, overall_rank:=rowSums(.SD), .SDcols=names(freqs)[grepl('_rank',names(freqs))]]
 freqs[, overall_rank:=rank(overall_rank)]
 freqs[, c('team',names(freqs)[grepl('_rank',names(freqs))]),with=FALSE][order(overall_rank)]
+# -------------------------------------------------------------------------
+
+
+# -------------------------------------------------------------------------
+# Graph foul differentials
+fds = formalizeTeamNames(fds)
+fd_means = formalizeTeamNames(fd_means)
+ggplot(fds, aes(x=foul_differential)) + 
+	geom_histogram(aes(y=..density..), fill='grey55') + 
+	geom_line(aes(y=..density..), stat='density', size=1.2) + 
+	geom_vline(data=fd_means, aes(xintercept=mean_fd), color='red') + 
+	facet_wrap(~team) + 
+	labs(title='Foul Differential', y='Density (Games at Each Level of FD', x='Foul Differential') + 
+	theme_bw() + 
+	theme(axis.title.y=element_text(size=14), 
+		axis.title.x=element_text(size=14), 
+		plot.title=element_text(hjust=.5, size=14))
+fd_means[, mean_fd:=round(mean_fd, 1)]
+fd_means[order(-mean_fd)]
 # -------------------------------------------------------------------------
 
 
