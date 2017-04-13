@@ -66,9 +66,9 @@ for(a in archives) {
 	saveRDS(injury_scr, outFile)
 	
 	# sleep because the wayback machine seems to know what I'm up to
-	Sys.sleep(3)
+	Sys.sleep(5)
 	if (i %% 10 == 0) Sys.sleep(10)
-	if (i %% 30 == 0) Sys.sleep(10)
+	if (i %% 20 == 0) Sys.sleep(10)
 	i=i+1
 }
 # -----------------------------------------------------------------------------------------
