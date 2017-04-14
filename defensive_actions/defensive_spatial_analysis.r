@@ -31,22 +31,21 @@ library(RColorBrewer)
 # ------------------
 
 
-# ------------------------------------------------------
+# ------------------------------------------------------------------
 # Files, directories and settings
 
 # input file
-inFile = './2016 Stats/raw defensive actions.csv'
+inFile = './webscrape/ASA/raw defensive actions_2016.csv'
 
 # shapefile of field
-root = 'C:/Users/davidp6/Google Drive/Personal/Fun Analyses/mls'
-outLines = paste0(root, '/_common/Soccer_Fields/soccer_field.jpg')
+outLines = './_common/Soccer_Fields/soccer_field.jpg'
 
 # analytical resolution (pixel size)
-r = 5
+r = 1
 
 # output file
-outFile = paste0(root, '/defensive_actions/defensive_actions_',r,'_cubic.pdf')
-# ------------------------------------------------------
+outFile = paste0('./defensive_actions/defensive_actions_',r,'.pdf')
+# ------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +92,7 @@ gridData[, y3:=y^3]
 nbFit = glm.nb(actions_pg ~ team*y*x*y2*x2*x3, gridData)
 
 # simple glm of success probability (takes about 7 minutes with x3, 1 minute with only x2 and y2)
-glmFit = glm(outcome ~ team*y*x*y2*x2*x3, data, family='binomial')
+glmFit = glm(outcome ~ team*y*x*y2*x2, data, family='binomial')
 
 # predict for every team
 cfData = data.table(expand.grid(seq(0,100, by=r), seq(0,100, by=r), unique(data$team)))
@@ -106,6 +105,10 @@ cfData[, pred:=inv.logit(predict(glmFit, newdata=cfData))]
 cfData[, pred_nb:=exp(predict(nbFit, newdata=cfData))]
 
 # cap estimates to avoid long tails
+q5 = quantile(cfData$pred, p=.1)
+q95 = quantile(cfData$pred, p=.9)
+cfData[pred<q5, pred:=q5]
+cfData[pred>q95, pred:=q95]
 q5 = quantile(cfData$pred_nb, p=.1)
 q95 = quantile(cfData$pred_nb, p=.9)
 cfData[pred_nb<q5, pred_nb:=q5]
