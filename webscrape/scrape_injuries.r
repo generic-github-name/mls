@@ -72,3 +72,28 @@ for(a in archives) {
 	i=i+1
 }
 # -----------------------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------------------
+# Append injury data
+files = list.files(outDir)
+for(f in files) {
+	tmp = data.table(readRDS(paste0(outDir, '/', f)))
+	tmp[, V1:=gsub('\t', '', V1)]
+	tmp[, V1:=gsub('\n', '', V1)]
+	tmp[, V1:=gsub('</li>','',V1)]
+	tmp[, V1:=gsub('<li>',',',V1)]
+	tmp[, V1:=gsub('</ul>','',V1)]
+	tmp[, V1:=gsub('<ul>','',V1)]
+	tmp[, V1:=gsub('<td>','',V1)]
+	tmp[, V1:=gsub('</td>','',V1)]
+	tmp[, V1:=gsub('<p>','',V1)]
+	tmp[, V1:=gsub('</p>','',V1)]
+	tmp[, V1:=gsub('</i>','',V1)]
+	tmp[, V1:=gsub('<td style="vertical-align: top;">,', '', V1)]
+	tmp[, V1:=gsub('<i style="text-align: right;">', ',', V1)]
+	tmp[, V1:=gsub('<td style="vertical-align: top;">', ',', V1)]
+	
+	tmp[grepl('/files/', V1), team:=V1
+}
+# -----------------------------------------------------------------------------------------
