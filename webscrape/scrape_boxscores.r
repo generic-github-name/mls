@@ -2,11 +2,10 @@
 # output files saved in the current working directory
 
 # to do
-# reformat pks to be pk_minutes and have 3 "slots" for every player
-# reformat goal_minutes to have 4 "slots" for every player
-# create "subbed_in" variable for minute every player entered the game (0 for starter)
-# create "subbed_out" variable for minute every player exited the game
-
+# clean up goals/pks/subbed variables so that '' is NA
+# FIX KNOWN BUG: if a team has 3+ keepers in the XVIII one of them gets assigned to the wrong team!
+#     example: http://matchcenter.mlssoccer.com/matchcenter/2014-07-28-seattle-sounders-fc-vs-la-galaxy/boxscore
+# FIX KNOWN BUG: Nelson Valdez and Nélson Valdez are seperate players. Are there others???
 
 # ------------------------------
 # Set up R
