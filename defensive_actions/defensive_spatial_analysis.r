@@ -2,16 +2,6 @@
 # Spatial analysis of defensive actions
 # Note: cowplot requires R 3.3 or higher
 
-# example of high press
-# NYRB
-
-# example of counter press
-# DC United
-
-# example of a little of both
-# TFC
-# SKC
-
 
 # ------------------
 # Set up R
@@ -53,6 +43,9 @@ outFile = paste0('./defensive_actions/defensive_actions_',r,'.pdf')
 
 # load
 data = fread(inFile)
+
+# sort teams
+data[, team:=factor(team, levels=unique(data$team)[order(unique(data$team))], order=TRUE)]
 
 # briefly visualize the data
 ggplot(data[team=='Seattle'], aes(y=y,x=x,shape=action)) + 
@@ -140,7 +133,7 @@ colors = brewer.pal(8, 'RdYlBu')
 f = 34
 
 # make heatmaps
-p1 = ggplot(cfData, aes(y=y,x=x,fill=pred_nb*f)) + 
+p1 = ggplot(cfData[team=='Toronto'], aes(y=y,x=x,fill=pred_nb*f)) + 
 	geom_tile() + 
 	draw_grob(lines, x=-10, y=-9, width=120, height=118) + # this is bad. I have to match the location/scale to the aspect ratio of the output
 	facet_wrap(~team) + 	
