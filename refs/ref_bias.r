@@ -37,13 +37,16 @@ source('./_common/formalize_team_names.r')
 # laod 
 data = fread(inFile)
 
-# only mls competitions
+# only mls competitions and current teams
 matchData = fread(matchFile)
 comps = c('MLS Cup', 'MLS Playoffs', 'MLS Regular Season')
 matchData = matchData[competition %in% comps]
 data = merge(data, matchData, by=c('team_home','team_away','date'), all.x=TRUE)
 data = data[competition %in% comps]
 setkey(data, NULL)
+currentTeams = unique(data[year(date)==2017]$team)
+data = data[team %in% currentTeams]
+matchData = matchData[team_away %in% currentTeams & team_home %in% currentTeams]
 
 # isolate ref tenure
 tenures = data[, c('date','ref1'), with=FALSE]
@@ -73,7 +76,6 @@ data[, secondyellow:=!is.na(secondyellow) & secondyellow!='']
 byVars = c('ref1', 'team', 'opposition','date')
 data[, opposition:=ifelse(team==team_home, team_away, team_home)]
 matchTotals = data[, list('yellows'=sum(yellow, na.rm=TRUE), 'straightreds'=sum(straightred, na.rm=TRUE), 'secondyellows'=sum(secondyellow, na.rm=TRUE), 'fouls'=sum(fouls, na.rm=TRUE), 'fouled'=sum(fouled, na.rm=TRUE)), by=byVars]
-
 
 # count cards and pks by ref-team
 byVars = c('ref1', 'team')
@@ -120,6 +122,9 @@ matchData = merge(matchData, tmp, 'opposition')
 # formalize for tables
 teamFreqs = formalizeTeamNames(teamFreqs)
 refFreqs = formalizeTeamNames(refFreqs)
+
+# count games by referee to exclude rare refs in regressions
+matchData[, games_reffed:=.N, by='ref1']
 # -------------------------------------------------------------------------
 
 
@@ -169,76 +174,150 @@ ranks[ref_rank==1]
 # -------------------------------------------------------------------------
 # Run Regressions to control for team foul tendency
 
-# run at individual game level to control for opposing team tendency
-glmFit = glm.nb(harmful_calls ~ ref1 + opposition_fouls_per_game, data=matchData[team=='seattle'])
-
-# # run at aggreagate level for simplicity
-# nbFits = list()
-# i=1
-# for(t in unique(frequencies$team)) {
-	# nbFits[[i]] = glm.nb(harmful_calls ~ ref1 + fouls, frequencies[team==t])
-	# i=i+1
-# }
-
-# glm(harmful_calls ~ ref1*team, data=frequencies[games>2])
-# -------------------------------------------------------------------------
-
-
-# -------------------------------------------------------------------------
-# Prep Regression Output
-
-# # get output
-# glmOutput = data.table(exp(cbind(coef(glmFit), confint(glmFit))))
-# setnames(glmOutput, c('est','lower','upper'))
-# glmOutput[, var:=names(coef(glmFit))]
-# glmOutput[, var:=gsub('ref1','',var)]
-
-# # identify reference ref
-# refs = unique(matchData[team=='seattle']$ref1)
-# reference = refs[!refs %in% glmOutput$var]
-# intercept = glmOutput[var=='(Intercept)']$est
-# glmOutput[!grepl('opposition',var) & var!='(Intercept)', est:=est+intercept]
-# glmOutput[!grepl('opposition',var) & var!='(Intercept)', lower:=lower+intercept]
-# glmOutput[!grepl('opposition',var) & var!='(Intercept)', upper:=upper+intercept]
-# glmOutput[var=='(Intercept)', var:=reference]
+# estimate harmful calls per game by ref and team, then compare expected to observed to see if there's bias
+frequencies[hpg==0, hpg_offset:=.25]
+frequencies[is.na(hpg_offset), hpg_offset:=hpg]
+glmFit = glm.nb(hpg ~ ref1 + team, data=frequencies)
 
 # predict
-predData = data.table(ref1=unique(matchData[team=='seattle']$ref1), opposition_fouls_per_game=mean(matchData$opposition_fouls_per_game))
-predData[, expected_calls:=predict(glmFit, newdata=predData)]
-# predData[, c('lower','upper'):=predict(glmFit, prediction.interval=TRUE, newdata=predData)]
-predData[, se:=predict(glmFit, se.fit=TRUE, newdata=predData)$se.fit]
-predData[, lower:=expected_calls-(1.96*se)]
-predData[, upper:=expected_calls+(1.96*se)]
-predData[, expected_calls:=exp(expected_calls)]
-predData[, lower:=exp(lower)]
-predData[, upper:=exp(upper)]
+frequencies[, hpg_pred:=predict(glmFit)]
+frequencies[, hpg_pred_se:=predict(glmFit, newdata=frequencies, se.fit=TRUE)$se]
+frequencies[, hpg_pred_lower:=hpg_pred-(1.96*hpg_pred_se)]
+frequencies[, hpg_pred_upper:=hpg_pred+(1.96*hpg_pred_se)]
+frequencies[, hpg_pred:=exp(hpg_pred)]
+frequencies[, hpg_pred_lower:=exp(hpg_pred_lower)]
+frequencies[, hpg_pred_upper:=exp(hpg_pred_upper)]
+frequencies = formalizeTeamNames(frequencies)
 
-# add frequency
-tmp = frequencies[team=='seattle', c('ref1','games'), with=FALSE]
-predData = merge(predData, tmp, 'ref1')
+# regression to show each referee's tendencies
+glmFitRef = glm.nb(harmful_calls ~ ref1, data=matchData[games_reffed>4])
 
+# regression to show each team's tendencies
+glmFitTeam = glm.nb(harmful_calls ~ team, data=matchData)
+
+# predict average HCPG for referees
+predsRef = data.table(ref1=unique(matchData[games_reffed>4]$ref1))
+predsRef[, hpg_pred:=predict(glmFitRef, newdata=predsRef)]
+predsRef[, hpg_pred_se:=predict(glmFitRef, newdata=predsRef, se.fit=TRUE)$se]
+predsRef[, hpg_pred_lower:=hpg_pred-(1.96*hpg_pred_se)]
+predsRef[, hpg_pred_upper:=hpg_pred+(1.96*hpg_pred_se)]
+predsRef[, hpg_pred:=exp(hpg_pred)*r]
+predsRef[, hpg_pred_lower:=exp(hpg_pred_lower)*r]
+predsRef[, hpg_pred_upper:=exp(hpg_pred_upper)*r]
+
+# predict average HCPG for teams
+predsTeam = data.table(team=unique(matchData$team))
+predsTeam[, hpg_pred:=predict(glmFitTeam, newdata=predsTeam)]
+predsTeam[, hpg_pred_se:=predict(glmFitTeam, newdata=predsTeam, se.fit=TRUE)$se]
+predsTeam[, hpg_pred_lower:=hpg_pred-(1.96*hpg_pred_se)]
+predsTeam[, hpg_pred_upper:=hpg_pred+(1.96*hpg_pred_se)]
+predsTeam[, hpg_pred:=exp(hpg_pred)*r]
+predsTeam[, hpg_pred_lower:=exp(hpg_pred_lower)*r]
+predsTeam[, hpg_pred_upper:=exp(hpg_pred_upper)*r]
+predsTeam = formalizeTeamNames(predsTeam)
+
+# count how often a ref is significantly above the line
+frequencies[, biased:=hpg_pred_upper<hpg]
+frequencies[games>3, sum(biased), by='ref1'][order(-V1)]
 # -------------------------------------------------------------------------
 
 
 # -------------------------------------------------------------------------
 # Graph
 
-# truncate upper bounds
-t = 2.5
-predData[upper>t, upper:=Inf]
+# colors
+fillColor1 = brewer.pal(8, 'GnBu')[8]
+fillColor2 = brewer.pal(8, 'YlGn')[8]
+teamColors = c('Atlanta United'='#9D2235', 'Chicago'='#102141', 'Colorado'='#862633', 'Columbus'='#FFF200', 'DC United'='#000000', 'FC Dallas'='#BF0D3E', 'Houston'='#F68712', 'LA Galaxy'='#00245D', 'Montreal'='#00529B', 'New England'='#C63323', 'NYCFC'='#69ACE5', 'NY Red Bulls'='#ED1E36', 'Orlando'='#612B9B', 'Philadelphia'='#B1872D', 'Portland'='#004812', 'Real Salt Lake'='#B30838', 'San Jose'='#0D4C92', 'Seattle Sounders'='#5D9732', 'Sporting KC'='#93B1D7', 'Toronto FC'='#E31937', 'Vancouver'='#00245E', 'Minnesota'='#8CD2F4')
 
-ggplot(predData, aes(y=expected_calls, ymax=upper, ymin=lower, x=reorder(ref1, -expected_calls))) + 
-	geom_bar(stat='identity', fill='#08519c') + 
-	geom_errorbar(color='gray40', width=.5, size=.5) + 
-	geom_text(aes(label=games)) + 
-	labs(title='Referee Tendencies', y='Expected Game-Changing Calls Per Game', x='') + 
+# labels
+predsRef[, lab:=round(hpg_pred, 1)]
+predsTeam[, lab:=round(hpg_pred, 1)]
+frequencies[, lab:=paste0(ref1, '\n', team)]
+
+# graph each referee's tendencies
+p1 = ggplot(predsRef, aes(y=hpg_pred, x=reorder(ref1, hpg_pred), ymin=hpg_pred_lower, ymax=hpg_pred_upper)) + 
+	geom_bar(stat='identity', fill=fillColor1) + 
+	geom_errorbar(width=.5) + 
+	geom_text(data=predsRef, aes(label=lab), hjust=1.25, color='grey90', fontface='bold') + 
+	coord_flip() + 
+	labs(title=paste('Average Game-Changing Calls per', r, 'Games'), y='', x='') +
+	theme_minimal() + 
+	theme(axis.title.x=element_blank(), axis.ticks.x=element_blank(), 
+		panel.grid.major.y = element_blank(), legend.position='none', 
+		plot.title=element_text(hjust=.5, size=16), axis.title.y=element_text(size=14))
+
+# graph each team's tendencies
+p2 = ggplot(predsTeam, aes(y=hpg_pred, x=reorder(team, hpg_pred), ymin=hpg_pred_lower, ymax=hpg_pred_upper)) + 
+	geom_bar(stat='identity', fill=fillColor2) + 
+	geom_errorbar(width=.5) + 
+	geom_text(data=predsTeam, aes(label=lab), hjust=1.25, color='grey90', fontface='bold') + 
+	coord_flip() + 
+	labs(title=paste('Average Game-Changing Calls per', r, 'Games'), y='', x='') +
+	theme_minimal() + 
+	theme(axis.title.x=element_blank(), axis.ticks.x=element_blank(), 
+		panel.grid.major.y = element_blank(), legend.position='none', 
+		plot.title=element_text(hjust=.5, size=16), axis.title.y=element_text(size=14))
+
+# graph expected HCPG vs observed
+p3 = ggplot(frequencies[games>3], aes(x=hpg_pred, xmin=hpg_pred_lower, xmax=hpg_pred_upper, y=hpg)) + 
+	geom_point(color=fillColor1) + 
+	geom_point(data=frequencies[team=='Seattle Sounders' & games>3], fill='#5D9732', size=2.5, shape=22, color='black') + 
+	geom_abline(slope=1, intercept=0) + 
+	geom_errorbarh(data=frequencies[hpg-hpg_pred>5.5 & games>3], height=.15) + 
+	geom_text(data=frequencies[hpg-hpg_pred>5.5 & games>3], aes(label=lab), size=2.5) + 
+	labs(title=paste('Expected vs Actual Game-Changing Calls per', r, 'Games'), 
+		y='Actual Game-Changing Calls', x='Expected Game-Changing Calls') + 
 	theme_bw() + 
-	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16))
+	theme(plot.title=element_text(hjust=.5, size=16), axis.title.y=element_text(size=14), 
+	axis.title.x=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=9)) 
+
+# graph expected HCPG vs observed
+p4 = ggplot(frequencies[team=='Seattle Sounders' & games>3], aes(x=hpg_pred, y=hpg)) + 
+	geom_abline(slope=1, intercept=0) + 
+	geom_text(aes(label=paste0(ref1, ' (', games, ')')), size=2.5) + 
+	labs(title=paste('Expected vs Actual Game-Changing Calls per', r, 'Games'), 
+		y='Actual Game-Changing Calls', x='Expected Game-Changing Calls') + 
+	theme_bw() + 
+	theme(plot.title=element_text(hjust=.5, size=16), axis.title.y=element_text(size=14), 
+	axis.title.x=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=9))
+
+# graph expected HCPG vs observed with error bars
+refList = c('Silviu Petrescu', 'Allen Chapman', 'Ricardo Salazar', 'Baldomero Toledo', 'Alan Kelly')
+p5 = ggplot(frequencies[team=='Seattle Sounders' & games>3], aes(x=hpg_pred, xmin=hpg_pred_lower, xmax=hpg_pred_upper, y=hpg)) + 
+	geom_abline(slope=1, intercept=0) + 
+	geom_text(aes(label=paste0(ref1, ' (', games, ')')), size=2.5) + 
+	geom_errorbarh(data=frequencies[team=='Seattle Sounders' & ref1 %in% refList], height=.15, color='grey50') + 
+	geom_point(data=frequencies[team=='Seattle Sounders' & ref1 %in% refList], color=fillColor1, shape=21) + 
+	labs(title=paste('Expected vs Actual Game-Changing Calls per', r, 'Games'), 
+		y='Actual Game-Changing Calls', x='Expected Game-Changing Calls') + 
+	theme_bw() + 
+	theme(plot.title=element_text(hjust=.5, size=16), axis.title.y=element_text(size=14), 
+	axis.title.x=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=9))
+
+# numbers that go along with the graph
+frequencies[team=='Seattle Sounders', c('hpg', 'hpg_pred', 'games','ref1'), with=F][order(hpg-hpg_pred)]
+	
+# histogram of residuals
+p6 = ggplot(frequencies[games>3], aes(x=hpg-hpg_pred)) + 
+	geom_histogram(fill=fillColor2, color='grey75') + 
+	labs(title=paste('Difference Between Expected and Actual Game-Changing Calls per', r, 'Games'), 
+		y='Number of Games', x='Difference') + 
+	theme_bw() + 
+	theme(plot.title=element_text(hjust=.5, size=16), axis.title.y=element_text(size=14), 
+	axis.title.x=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=9)) 
 
 # -------------------------------------------------------------------------
 
 
 # -------------------------------------------------------------------------
 # Return output
-
+pdf(outFile, height=6, width=9)
+p1
+p2
+p3
+p4
+p5
+p6
+dev.off()
 # -------------------------------------------------------------------------
