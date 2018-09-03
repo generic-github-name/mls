@@ -1,4 +1,4 @@
-# Explore goal difference with each player on the field
+# Explore goal difference and other stats with each player on the field to analyze who provides the "spark"
 
 
 # --------------------
@@ -14,8 +14,19 @@ library(stringr)
 # -------------------------------------------------------------------------
 # Files/directories/lists
 
-# input file
-inFile = './webscrape/boxscores_for_every_match.csv'
+# team to analyze
+t = 'Seattle'
+
+# input files
+inFileDribbles = './webscrape/ASA/2017/dribbles.csv'
+inFilePasses = './webscrape/ASA/2017/raw passes.csv'
+inFileShots = './webscrape/ASA/2017/raw shots.csv'
+inFileFoulsC = './webscrape/ASA/2017/raw fouls committed.csv'
+inFileFoulsS = './webscrape/ASA/2017/raw fouls suffered.csv'
+inFileDefense = './webscrape/ASA/2017/raw defensive actions.csv'
+inFileLineups = './webscrape/ASA/2017/Starting Lineups.csv'
+inFileMinutes = './webscrape/ASA/2017/minutes played by game.csv'
+inFileGameinfo = './webscrape/ASA/2017/Game Information.csv'
 
 # match-level file
 matchFile = './webscrape/all_matches_in_mls_website.csv'
@@ -29,180 +40,242 @@ source('./_common/formalize_team_names.r')
 # -------------------------------------------------------------------------
 
 
-# --------------------------------------------------------------------------------
-# Load/prep data
+# -------------------------------------------------------------------------------------
+# Load/prep substitution data
 
-# laod 
-data = fread(inFile)
+# load
+lineups = data.table(read.csv(inFileLineups)) # fread doesn't like this file
+minutes = fread(inFileMinutes)
+gameinfo = fread(inFileGameinfo)
 
-# subset
-vars = c('player','team','date','team_away','team_home','minutes','goal_1','goal_2','goal_3','goal_4','subbed_in','subbed_out')
+# format various tables/variables
+subs = melt(lineups, id.vars=c('gameID', 'team', 'home', 'formation'), variable.name='spot', value.name='player')
+subs = subs[player!='']
+subs[, gameID:=as.character(gameID)]
+gameinfo[, gameID:=as.character(gameID)]
+minutes[, minutes:=as.numeric(minutes)]
+
+# figure out when each player subbed in
+subs[!grepl('bench',spot), subbed_in:=0]
+subs = merge(subs, gameinfo[, c('gameID','secondHalfTime','date'), with=FALSE], by='gameID')
+subs[, c('minute','second') := tstrsplit(secondHalfTime, ':', fixed=TRUE)]
+subs[, end:=as.numeric(minute)+(as.numeric(second)/60)]
+subs = merge(subs, minutes, by=c('gameID','player'))
+subs$minute = NULL
+subs$second = NULL
+subs[is.na(subbed_in), subbed_in:=end-minutes]
+
+# figure out when each player subbed out 
+# (complicated because I want to ensure there are no times when a player doesn't sub out after his replacement comes in,
+# and I'm sure the subbed_in variable is correct)
+subs[, sub_order:=rank(minutes), by=c('gameID','team')]
+subs[, max:=max(minutes), by=c('gameID','team')]
+subs[minutes==max, sub_order:=NA]
+subs[sub_order==1 & subbed_in!=0, last_sub_time:=subbed_in]
+subs[sub_order==2 & subbed_in!=0, middle_sub_time:=subbed_in] # this will be NA if there was only 1 sub
+subs[sub_order==3 & subbed_in!=0, first_sub_time:=subbed_in] # this will be NA if there were only 2 subs
+subs[, last_sub_time:=max(last_sub_time, na.rm=TRUE), by=c('gameID','team')]
+subs[, middle_sub_time:=max(middle_sub_time, na.rm=TRUE), by=c('gameID','team')]
+subs[, first_sub_time:=max(first_sub_time, na.rm=TRUE), by=c('gameID','team')]
+subs[, max:=max(sub_order, na.rm=TRUE), by=c('gameID','team')]
+subs[sub_order==max & subbed_in==0, subbed_out:=last_sub_time, by=c('gameID','team')]
+subs[sub_order==max-1 & subbed_in==0, subbed_out:=middle_sub_time, by=c('gameID','team')]
+subs[sub_order==max-2 & subbed_in==0, subbed_out:=first_sub_time, by=c('gameID','team')]
+subs[is.na(subbed_out), subbed_out:=end]
+
+# clean up a little
+subs = subs[, c('gameID','date','player','team','home','formation','subbed_in','subbed_out','minutes','end'), with=FALSE]
+# -------------------------------------------------------------------------------------
+
+
+# -------------------------------------------------------------------------------------
+# Load/prep action data
+
+# load
+dribbles = fread(inFileDribbles)
+passes = fread(inFilePasses)
+shots = fread(inFileShots)
+foulsC = fread(inFileFoulsC)
+foulsS = fread(inFileFoulsS)
+defense = fread(inFileDefense)
+
+# identify actions
+dribbles[, action:='dribble']
+passes[, action:='pass']
+shots[, action:='shot']
+foulsC[, action:='foul_committed']
+foulsS[, action:='foul_suffered']
+defense[, action:='defense']
+
+# rename
+setnames(shots, 'shooter', 'player')
+setnames(passes, c('success','passer'), c('outcome','player'))
+setnames(dribbles, 'success', 'outcome')
+
+# append
+data = rbind(dribbles, passes, shots, foulsC, foulsS, defense, fill=TRUE)
+
+# subset variables
+vars = c('date', 'time', 'player', 'team', 'team.1', 'x', 'y', 'action', 'outcome', 'result', 'keyPass')
 data = data[, vars, with=FALSE]
-data = data[team_home=='seattle' | team_away=='seattle']
 
-# fix duplicate names
-data[player=='Nélson Valdez', player:='Nelson Valdez']
+# subset to just the selected team
+data = data[team==t | team.1==t]
 
-# convert to numeric
-for(v in c(paste0('goal_',seq(4)), 'subbed_in','subbed_out')) {
-	data[get(v)=='', (v):=NA]
-	data[get(v)=='HT', (v):='45']
-	data[get(v)=='EHT', (v):='45']
-	data[get(v)=='EOR', (v):='90']
-	data[, (v):=gsub('\'', '', get(v))]
-	newVar = sapply(data[[v]], function(x) eval(parse(text=x)))
-	data[, (v):=newVar]
+# format time variable
+time = str_split(data$time, ':', 3)
+time = data.table(do.call('rbind', time))
+time[, V1:=as.numeric(gsub(' ', '', V1))]
+time[, V2:=as.numeric(gsub(' ', '', V2))]
+m = time$V1 + (time$V2/60)
+data[, minute:=m]
+
+# sort
+data = data[order(minute)]
+
+# create "pass into the box" variable
+# later
+# -------------------------------------------------------------------------------------
+
+
+# --------------------------------------------------------------------------------
+# Bring in sub times and aggregate various stats by player
+
+# merge
+data = merge(data, subs, c('date','team','player'))
+
+# loop over players
+i=1
+for(p in unique(data[team==t]$player)) {
+	data[player==p, sin:=subbed_in, by='gameID']
+	data[, sin:=max(sin, na.rm=TRUE), by='gameID']
+	data[player==p, sout:=subbed_out, by='gameID']
+	data[, sout:=max(sout, na.rm=TRUE), by='gameID']
+	data[, played:=p %in% player, by='gameID']
+	tmpStats = data[played==TRUE & minute>=sin & minute<=sout, list(player=p, 
+						goals_for=sum(result=='Goal' & team==t, na.rm=TRUE), 
+						goals_against=sum(result=='Goal' & team!=t, na.rm=TRUE), 
+						passes_completed=sum(action=='pass' & outcome==1 & team==t, na.rm=TRUE), 
+						passes_missed=sum(action=='pass' & outcome==0 & team==t, na.rm=TRUE), 
+						passes_against_completed=sum(action=='pass' & outcome==1 & team!=t, na.rm=TRUE), 
+						passes_against_missed=sum(action=='pass' & outcome==0 & team!=t, na.rm=TRUE), 
+						keypasses_for=sum(keyPass==1 & team==t, na.rm=TRUE), 
+						keypasses_against=sum(keyPass==1 & team!=t, na.rm=TRUE), 
+						fouls_committed=sum(action=='foul_committed' & team==t, na.rm=TRUE), 
+						fouls_suffered=sum(action=='foul_suffered' & team!=t, na.rm=TRUE), 
+						dribbles_completed=sum(action=='dribble' & outcome==1 & team==t, na.rm=TRUE), 
+						dribbles_missed=sum(action=='dribble' & outcome==0 & team==t, na.rm=TRUE), 
+						dribbles_against_completed=sum(action=='dribble' & outcome==1 & team!=t, na.rm=TRUE), 
+						dribbles_against_missed=sum(action=='dribble' & outcome==0 & team!=t, na.rm=TRUE)
+					)]
+	if (i==1) stats = tmpStats
+	if (i>1) stats = rbind(stats, tmpStats)
+	i=i+1
 }
 
-# fix missing substitution data with assumptions
-data[minutes<45 & is.na(subbed_in) & is.na(subbed_out), subbed_in:=93-minutes]
-data[minutes>=45 & minutes<90 & is.na(subbed_in) & is.na(subbed_out), subbed_out:=minutes]
-data[minutes==0, subbed_in:=NA]
+# add minutes
+m = unique(data[,c('gameID','player','minutes'),with=FALSE])
+m = m[, list(minutes=sum(minutes,na.rm=TRUE)), by='player']
+stats = merge(stats, m, by='player', all.x=TRUE)
 
-# goal times for and away by game
-for(d in unique(data$date)) {
-	gfor = data[team=='seattle' & date==d]
-	goals = c(gfor$goal_1, gfor$goal_2, gfor$goal_3, gfor$goal_4)
-	goals = goals[!is.na(goals)]
-	against = data[(team_home=='seattle' | team_away=='seattle') & team!='seattle' & date==d]
-	goals_a = c(against$goal_1, against$goal_2, against$goal_3, against$goal_4)
-	goals_a = goals_a[!is.na(goals_a)]
-	
-	# compute goals scored while player was on the field per game
-	for(p in unique(data[team=='seattle' & date==d]$player)) {
-		sin = data[player==p & date==d]$subbed_in
-		sout = data[player==p & date==d]$subbed_out
-		if (is.na(sin)) sin = 0
-		if (is.na(sout)) sout = Inf
-		if (data[player==p & date==d]$minutes==0) sout = 0
-		goals_on = length(goals[goals>=sin & goals<sout])
-		goals_off = length(goals[goals<sin | goals>sout])
-		
-		# get goals against
-		goals_a_on = length(goals_a[goals_a>=sin & goals_a<sout])
-		goals_a_off = length(goals_a[goals_a<sin | goals_a>sout])
-		data[player==p & date==d, goals_for:=goals_on]
-		data[player==p & date==d, goals_against:=goals_a_on]
-		data[player==p & date==d, goals_for_off:=goals_off]
-		data[player==p & date==d, goals_against_off:=goals_a_off]
-	}
-}
-data[minutes==0, goals_for:=NA]
-data[minutes==0, goals_against:=NA]
+# make summary variables
+stats[, gd:=goals_for-goals_against]
+stats[, gd_per90:=(goals_for/minutes*90)-(goals_against/minutes*90)]
+stats[, keypassd:=keypasses_for-keypasses_against]
+stats[, keypassd_per90:=(keypasses_for/minutes*90)-(keypasses_against/minutes*90)]
+stats[, fould:=fouls_committed-fouls_suffered]
+stats[, fould_per90:=(fouls_committed/minutes*90)-(fouls_suffered/minutes*90)]
+stats[, pass_pct:=passes_completed/(passes_completed+passes_missed)]
+stats[, pass_pct_against:=passes_against_completed/(passes_against_completed+passes_against_missed)]
+stats[, dribble_pct:=dribbles_completed/(dribbles_completed+dribbles_missed)]
+stats[, dribble_pct_against:=dribbles_against_completed/(dribbles_against_completed+dribbles_against_missed)]
 
-# only mls competitions
-matchData = fread(matchFile)
-comps = c('MLS Cup', 'MLS Playoffs', 'MLS Regular Season', 'U.S. Open Cup')
-data = merge(data, matchData, by=c('team_home','team_away','date'), all.x=TRUE)
-data = data[competition %in% comps]
-setkey(data, NULL)
-
-# now keep only seattle (now that we've recorded goals against)
-data = data[team=='seattle']
-
-# extra variables
-data[, gd:=goals_for-goals_against]
-data[, gd_off:=goals_for_off-goals_against_off]
-data[, total_minutes:=sum(minutes), by=c('team','player')]
-data[, mean_gd:=mean(gd, na.rm=TRUE), by=c('team','player')]
-
-# keep only players and goals
-idVars = c('team','date')
-data = data[, c(idVars,'goals_against','goals_for','goals_against_off','goals_for_off','gd','gd_off','player','minutes','total_minutes'), with=FALSE]
-
-# identify current players
-currentPlayers = unique(data[year(date)==2017 & total_minutes>300]$player)
+# drop players with few minutes
+stats = stats[minutes>750]
 # --------------------------------------------------------------------------------
 
 
 # --------------------------------------------------------------------------------
-# Analyze
+# Make graphs
 
-# simple averages among current players 
-means = data[total_minutes>300 & player %in% currentPlayers, list(
-							goals_for=sum(goals_for, na.rm=TRUE), 
-							goals_against=sum(goals_against, na.rm=TRUE), 
-							gd=mean(gd, na.rm=TRUE), 
-							sd=sd(gd, na.rm=TRUE), 
-							minutes=sum(minutes, na.rm=TRUE),
-							games=.N), by='player'][order(-gd)]
-means 
+colors = c('#AACD6E', '#F16B6F', '#C5C6B6', '#3C3530', '#ABD0CE')
 
-# simple averages across all data
-allMeans = data[total_minutes>300, list(
-							goals_for=sum(goals_for, na.rm=TRUE), 
-							goals_against=sum(goals_against, na.rm=TRUE), 
-							gd=mean(gd, na.rm=TRUE), 
-							sd=sd(gd, na.rm=TRUE), 
-							minutes=sum(minutes, na.rm=TRUE),
-							games=.N), by='player'][order(-gd)]
-							
-# simple averages among current players when they're off the field
-meansOff = data[total_minutes>300 & player %in% currentPlayers, list(
-							goals_for_off=sum(goals_for_off, na.rm=TRUE), 
-							goals_against_off=sum(goals_against_off, na.rm=TRUE), 
-							gd_off=mean(gd_off, na.rm=TRUE), 
-							sd=sd(gd, na.rm=TRUE), 
-							minutes=sum(minutes, na.rm=TRUE),
-							games=.N), by='player'][order(-gd_off)]
-meansOff 
+gdPlot = ggplot(data=stats, aes(y=gd, x=reorder(player, -stats$gd))) + 
+	geom_bar(stat='identity', fill=colors[1]) + 
+	geom_text(data=stats[gd>=0], aes(label=minutes, x=player), vjust=-.3) + # labels above
+	geom_text(data=stats[gd<0], aes(label=minutes, x=player), vjust=1) + # labels below
+	labs(title='Goals', y='Goal Differential\nwith Player on Field', x='', caption='Bar Labels: Total Minutes Played') + 
+	theme_bw() + 
+	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16))
 
-# tabulate results by player
-data[, result:=paste0(goals_for, '-', goals_against)]
-table(data[player %in% currentPlayers & result!='NA-NA', c('player','result'), with=FALSE])
-
-# regression for current players (to show that it's not significant)
-lmFit = lm(gd ~ player, data[total_minutes>300 & player %in% currentPlayers])
-est = data.table(cbind(coef(lmFit),confint(lmFit)))
-est[, player:=gsub('player','',names(coef(lmFit)))]
-est[order(-V1)]
-# --------------------------------------------------------------------------------
-
-
-# --------------------------------------------------------------------------------
-# Make a nice graph
-p1 = ggplot(data=means, aes(y=gd, x=reorder(player, -means$gd), ymax=gd+(.1*sd), ymin=gd-(.1*sd))) + 
-	geom_bar(stat='identity', fill='#08519c') + 
-	geom_text(data=means[gd>=0], aes(label=minutes, x=player), vjust=-.3) + # labels above
-	geom_text(data=means[gd<0], aes(label=minutes, x=player), vjust=1) + # labels below
-	labs(title='Player Contributions', y='Mean Goal Differential\nwith Player on Field', x='', caption='Bar Labels: Total Minutes Played') + 
+gd90Plot = ggplot(data=stats, aes(y=gd_per90, x=reorder(player, -stats$gd_per90))) + 
+	geom_bar(stat='identity', fill=colors[1]) + 
+	geom_text(data=stats[gd_per90>=0], aes(label=minutes, x=player), vjust=-.3) + # labels above
+	geom_text(data=stats[gd_per90<0], aes(label=minutes, x=player), vjust=1) + # labels below
+	labs(title='Goals', y='Goal Differential Rate\n(Goals per 90 - Goals Conceded per 90)\nwith Player on Field', x='', caption='Bar Labels: Total Minutes Played') + 
 	theme_bw() + 
 	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16))
 	
-p2 = ggplot(data=allMeans, aes(y=gd, x=reorder(player, -allMeans$gd))) + 
-	geom_bar(stat='identity', fill='#08519c') + 
-	geom_text(data=allMeans[gd>=0], aes(label=minutes, x=player), vjust=-.3, size=2) + # labels above
-	geom_text(data=allMeans[gd<0], aes(label=minutes, x=player), vjust=.95, size=2) + # labels below
-	labs(title='Player Contributions', y='Mean Goal Differential\nwith Player on Field', x='', caption='Bar Labels: Total Minutes Played') + 
-	theme_bw() + 
-	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=10), plot.title=element_text(hjust=.5, size=16))
-	
-p3 = ggplot(data=meansOff, aes(y=gd_off, x=reorder(player, meansOff$gd_off))) + 
-	geom_bar(stat='identity', fill='#CB181D') + 
-	geom_text(data=meansOff[gd_off>=0], aes(label=minutes, x=player), vjust=-.3) + # labels above
-	geom_text(data=meansOff[gd_off<0], aes(label=minutes, x=player), vjust=1) + # labels below
-	labs(title='Player Contributions', y='Mean Goal Differential\nwith Player off Field', x='', caption='Bar Labels: Total Minutes Played') + 
+keypassdPlot = ggplot(data=stats, aes(y=keypassd, x=reorder(player, -stats$keypassd))) + 
+	geom_bar(stat='identity', fill=colors[2]) + 
+	geom_text(data=stats[keypassd>=0], aes(label=minutes, x=player), vjust=-.3) + # labels above
+	geom_text(data=stats[keypassd<0], aes(label=minutes, x=player), vjust=1) + # labels below
+	labs(title='Key Passes', y='Key Pass Differential\nwith Player on Field', x='', caption='Bar Labels: Total Minutes Played') + 
 	theme_bw() + 
 	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16))
 	
+keypassd90Plot = ggplot(data=stats, aes(y=keypassd_per90, x=reorder(player, -stats$keypassd_per90))) + 
+	geom_bar(stat='identity', fill=colors[2]) + 
+	geom_text(data=stats[keypassd_per90>=0], aes(label=minutes, x=player), vjust=-.3) + # labels above
+	geom_text(data=stats[keypassd_per90<0], aes(label=minutes, x=player), vjust=1) + # labels below
+	labs(title='Key Passes', y='Key Pass Differential Rate\n(Key Pass per 90 - Key Pass Conceded per 90)\nwith Player on Field', x='', caption='Bar Labels: Total Minutes Played') + 
+	theme_bw() + 
+	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16))
 	
-# ggplot(data[player %in% currentPlayers], aes(y=gd, x=reorder(player, -mean_gd))) + 
-	# geom_bar(data=means, aes(y=gd,x=reorder(player, -means$gd)), stat='identity', fill='#08519c') + 
-	# geom_jitter(height=.1, width=0, shape='_', size=8, alpha=.4) + 
-	# labs(title='Player Contributions', y='Goal Differential with Player on Field', x='', caption='Individual GDs Jittered for Display') + 
-	# theme_bw() + 
-	# theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16), plot.caption=element_text(size=8))
-
+fouldPlot = ggplot(data=stats, aes(y=fould, x=reorder(player, -stats$fould))) + 
+	geom_bar(stat='identity', fill=colors[4]) + 
+	geom_text(data=stats[fould>=0], aes(label=minutes, x=player), vjust=-.3) + # labels above
+	geom_text(data=stats[fould<0], aes(label=minutes, x=player), vjust=1) + # labels below
+	labs(title='Fouls', y='Foul Differential (Committed - Suffered)\nwith Player on Field', x='', caption='Bar Labels: Total Minutes Played') + 
+	theme_bw() + 
+	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16))
+	
+fould90Plot = ggplot(data=stats, aes(y=fould_per90, x=reorder(player, -stats$fould_per90))) + 
+	geom_bar(stat='identity', fill=colors[4]) + 
+	geom_text(data=stats[fould_per90>=0], aes(label=minutes, x=player), vjust=-.3) + # labels above
+	geom_text(data=stats[fould_per90<0], aes(label=minutes, x=player), vjust=1) + # labels below
+	labs(title='Fouls', y='Foul Differential Rate\n(Committed per 90 - Suffered per 90)\nwith Player on Field', x='', caption='Bar Labels: Total Minutes Played') + 
+	theme_bw() + 
+	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16))
+	
+passPlot = ggplot(data=stats, aes(y=pass_pct, x=reorder(player, -stats$pass_pct))) + 
+	geom_bar(stat='identity', fill=colors[3]) + 
+	geom_text(data=stats[pass_pct>=0], aes(label=minutes, x=player), vjust=-.3) + # labels above
+	geom_text(data=stats[pass_pct<0], aes(label=minutes, x=player), vjust=1) + # labels below
+	labs(title='Passes', y='Pass Completion Percentage\nwith Player on Field', x='', caption='Bar Labels: Total Minutes Played') + 
+	theme_bw() + 
+	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16))
+	
+dribblePlot = ggplot(data=stats, aes(y=dribble_pct, x=reorder(player, -stats$dribble_pct))) + 
+	geom_bar(stat='identity', fill=colors[5]) + 
+	geom_text(data=stats[dribble_pct>=0], aes(label=minutes, x=player), vjust=-.3) + # labels above
+	geom_text(data=stats[dribble_pct<0], aes(label=minutes, x=player), vjust=1) + # labels below
+	labs(title='Dribbles', y='Dribble Success Rate\nwith Player on Field', x='', caption='Bar Labels: Total Minutes Played') + 
+	theme_bw() + 
+	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16))
 # --------------------------------------------------------------------------------
 
 
 # --------------------------------------------------------------------------------
 # Save separate files to have different aspect ratios
-pdf(outFile1, height=5.5, width=6.5)
-p1
-p3
-dev.off()
-pdf(outFile2, height=6, width=10)
-p2
+pdf(outFile1, height=6, width=9)
+gdPlot
+gd90Plot
+keypassdPlot
+keypassd90Plot
+fouldPlot
+fould90Plot
+passPlot
+dribblePlot
 dev.off()
 # --------------------------------------------------------------------------------

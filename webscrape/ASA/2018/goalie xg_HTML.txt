@@ -1,0 +1,31 @@
+x
+1 <!-- html table generated in R 3.4.1 by xtable 1.8-2 package -->
+<!-- Sun Mar 25 19:32:06 2018 -->
+<table border=1>
+<tr> <th> goalie </th> <th> saves </th> <th> goals </th> <th> sog </th> <th> xGA </th> <th> gMinusxG </th> <th> totalMinutes </th>  </tr>
+  <tr> <td align="center"> Alexander Bono </td> <td align="center"> 4 </td> <td align="center"> 3 </td> <td align="center"> 7 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 192 </td> </tr>
+  <tr> <td align="center"> Andre Blake </td> <td align="center"> 6 </td> <td align="center"> 0 </td> <td align="center"> 6 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 186 </td> </tr>
+  <tr> <td align="center"> Andrew Tarbell </td> <td align="center"> 4 </td> <td align="center"> 5 </td> <td align="center"> 9 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 191 </td> </tr>
+  <tr> <td align="center"> Brad Guzan </td> <td align="center"> 7 </td> <td align="center"> 6 </td> <td align="center"> 13 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 297 </td> </tr>
+  <tr> <td align="center"> Chris Seitz </td> <td align="center"> 7 </td> <td align="center"> 4 </td> <td align="center"> 11 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 301 </td> </tr>
+  <tr> <td align="center"> David Bingham </td> <td align="center"> 13 </td> <td align="center"> 3 </td> <td align="center"> 16 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 286 </td> </tr>
+  <tr> <td align="center"> David Ousted </td> <td align="center"> 9 </td> <td align="center"> 9 </td> <td align="center"> 18 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 391 </td> </tr>
+  <tr> <td align="center"> Evan Bush </td> <td align="center"> 10 </td> <td align="center"> 5 </td> <td align="center"> 15 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 289 </td> </tr>
+  <tr> <td align="center"> Jake Gleeson </td> <td align="center"> 7 </td> <td align="center"> 7 </td> <td align="center"> 14 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 288 </td> </tr>
+  <tr> <td align="center"> Jimmy Maurer </td> <td align="center"> 10 </td> <td align="center"> 2 </td> <td align="center"> 12 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 290 </td> </tr>
+  <tr> <td align="center"> Joe Bendik </td> <td align="center"> 5 </td> <td align="center"> 5 </td> <td align="center"> 10 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 296 </td> </tr>
+  <tr> <td align="center"> Jon Kempin </td> <td align="center"> 1 </td> <td align="center"> 1 </td> <td align="center"> 2 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 93 </td> </tr>
+  <tr> <td align="center"> Luis Robles </td> <td align="center"> 7 </td> <td align="center"> 1 </td> <td align="center"> 8 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 285 </td> </tr>
+  <tr> <td align="center"> Matt Turner </td> <td align="center"> 10 </td> <td align="center"> 5 </td> <td align="center"> 15 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 283 </td> </tr>
+  <tr> <td align="center"> Matthew Lampson </td> <td align="center"> 18 </td> <td align="center"> 8 </td> <td align="center"> 26 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 384 </td> </tr>
+  <tr> <td align="center"> Nick Rimando </td> <td align="center"> 14 </td> <td align="center"> 5 </td> <td align="center"> 19 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 288 </td> </tr>
+  <tr> <td align="center"> Richard Sanchez </td> <td align="center"> 7 </td> <td align="center"> 6 </td> <td align="center"> 13 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 192 </td> </tr>
+  <tr> <td align="center"> Sean Johnson </td> <td align="center"> 12 </td> <td align="center"> 3 </td> <td align="center"> 15 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 388 </td> </tr>
+  <tr> <td align="center"> Stefan Frei </td> <td align="center"> 6 </td> <td align="center"> 4 </td> <td align="center"> 10 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 189 </td> </tr>
+  <tr> <td align="center"> Stefan Marinovic </td> <td align="center"> 8 </td> <td align="center"> 5 </td> <td align="center"> 13 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 394 </td> </tr>
+  <tr> <td align="center"> Tim Howard </td> <td align="center"> 7 </td> <td align="center"> 4 </td> <td align="center"> 11 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 192 </td> </tr>
+  <tr> <td align="center"> Tim Melia </td> <td align="center"> 7 </td> <td align="center"> 9 </td> <td align="center"> 16 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 389 </td> </tr>
+  <tr> <td align="center"> Tyler Miller </td> <td align="center"> 12 </td> <td align="center"> 1 </td> <td align="center"> 13 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 189 </td> </tr>
+  <tr> <td align="center"> Zack Steffen </td> <td align="center"> 8 </td> <td align="center"> 2 </td> <td align="center"> 10 </td> <td align="center">  </td> <td align="center">  </td> <td align="center"> 285 </td> </tr>
+   </table>
+

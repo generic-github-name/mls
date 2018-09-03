@@ -13,7 +13,9 @@ library(ggplot2)
 # input/output files
 inFileHistorical = './webscrape/all_matches_in_mls_website.csv'
 inFile2017 = './webscrape/ASA/2017/Game Information.csv'
+inFile2018 = './webscrape/ASA/2018/Game Information.csv'
 outFile = './historical_trends/graphs.pdf'
+tableFile = './historical_trends/ppg_table.csv'
 source('./_common/formalize_team_names.r')
 # --------------------------------------------------------
 
@@ -22,6 +24,7 @@ source('./_common/formalize_team_names.r')
 # load data
 oldData = fread(inFileHistorical)
 newData = fread(inFile2017)
+newData = rbind(newData, fread(inFile2018))
 
 # drop before 2017 from old data
 oldData = oldData[year(date)<2017]
@@ -41,6 +44,9 @@ newData[, competition:='MLS Regular Season']
 
 # rbind
 data = rbind(newData, oldData)
+
+# keep only post 2009
+# data = data[year(date)>=2009]
 
 # drop internationals, friendlies and preseason games
 comps = 'MLS Regular Season'
@@ -62,7 +68,7 @@ data = formalizeTeamNames(data)
 # ----------------------------------------------------------------------------------
 # Reshape data (is there a better way?)
 i=1
-teams = unique(data[competition=='MLS Regular Season' & year(date)<2017]$team_home)
+teams = unique(data[competition=='MLS Regular Season']$team_home)
 vars = c('winner', 'team_home', 'team_away', 'home_points', 'away_points', 'date')
 for(t in teams) {
 	tmp = data[team_away==t | team_home==t, vars, with=FALSE]
@@ -81,7 +87,7 @@ for(t in teams) {
 # Analyze
 
 # identify conference
-west = c('Colorado', 'FC Dallas', 'Sporting KC', 'LA Galaxy', 'San Jose', 'Real Salt Lake', 'Chivas USA', 'Houston', 'Seattle Sounders', 'Portland', 'Vancouver')
+west = c('Colorado', 'FC Dallas', 'Sporting KC', 'LA Galaxy', 'San Jose', 'Real Salt Lake', 'Chivas USA', 'Houston', 'Seattle Sounders', 'Portland', 'Vancouver', 'Minnesota')
 analysisData[team %in% west, conference:='West']
 analysisData[!team %in% west, conference:='East']
 
@@ -123,6 +129,39 @@ analysisData[, cumulative_mean_points:=cummean(points), by='team']
 
 
 # ----------------------------------------------------------------------------------
+# Display numbers
+
+# total wins/draws/losses
+table(analysisData[team=='Seattle Sounders']$points)
+
+# current ppg for seattle
+analysisData[team=='Seattle Sounders'][game_number==max(game_number)]$cumulative_mean_points
+
+# current ppg for all teams
+analysisData[, games_played:=max(game_number), by='team']
+analysisData[, wins:=points==3]
+analysisData[, ties:=points==1]
+analysisData[, losses:=points==0]
+tmp = analysisData[game_number==games_played, c('team','cumulative_mean_points', 'games_played'), with=F][order(-cumulative_mean_points)]
+counts = analysisData[, .(Wins=sum(wins), Ties=sum(ties), Losses=sum(losses)), by='team']
+tmp[, cumulative_mean_points:=round(cumulative_mean_points, 2)]
+tmp = merge(tmp, counts, 'team')
+tmp = tmp[order(-cumulative_mean_points, -games_played)]
+setnames(tmp, c('Team', 'Cumulative Points per Game', 'Games Played', 'Wins', 'Ties', 'Losses'))
+tmp
+write.csv(tmp, tableFile, row.names=FALSE)
+
+# ppg in first 299 games
+sfcGames = max(analysisData[team=='Seattle Sounders']$game_number)
+analysisData[game_number==sfcGames][order(-cumulative_mean_points, games_played)]
+
+# team rankings over time
+wide = dcast(analysisData[, c('date', 'team', 'cumulative_mean_points'), with=F], date~team)
+wide
+# ----------------------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------------------
 # Time series plots
 
 # identify team colors
@@ -133,7 +172,8 @@ otherTeamColors = setNames(otherTeamColors, otherTeams)
 teamColors = c(teamColors, otherTeamColors)
 
 # set a minimum games before a team shows up on the plots
-minGames = 25
+minGames = 35
+analysisData = analysisData[game_number>minGames]
 
 # manually place labels
 teamLabels = analysisData[game_number==minGames+10]
@@ -193,20 +233,20 @@ o = o[order(-cumulative_mean_points)]
 analysisData[, team:=factor(team, o$team)]
 
 # graph west
-p1 = ggplot(analysisData[game_number>minGames & conference=='West'], aes(y=cumulative_mean_points, x=date, color=team, group=team)) + 
+p1 = ggplot(analysisData[conference=='West'], aes(y=cumulative_mean_points, x=date, color=team, group=team)) + 
 	geom_line(size=1.2) + 
 	geom_text(data=teamLabels[conference=='West'], aes(label=team, y=cumulative_mean_points, x=date), size=5, color='grey20') + 
 	scale_color_manual('Ranking', values=teamColors) + 
-	labs(title='Best Team by Points\nWestern Conference', y='Cumulative Points per Game', x='') + 
+	labs(title='Team History\nWestern Conference', y='Cumulative Points per Game', x='') + 
 	theme_bw() + 
 	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16)) 
 
 # graph east
-p2 = ggplot(analysisData[game_number>minGames & (conference=='East' | team=='Seattle Sounders')], aes(y=cumulative_mean_points, x=date, color=team, group=team)) + 
+p2 = ggplot(analysisData[conference=='East' | team=='Seattle Sounders'], aes(y=cumulative_mean_points, x=date, color=team, group=team)) + 
 	geom_line(size=1.2) + 
 	geom_text(data=teamLabels[conference=='East' | team=='Seattle Sounders'], aes(label=team, y=cumulative_mean_points, x=date), size=5, color='grey20') + 
 	scale_color_manual('Ranking', values=teamColors) + 
-	labs(title='Best Team by Points\nEastern Conference (plus Seattle)', y='Cumulative Points per Game', x='') + 
+	labs(title='Team History\nEastern Conference (plus Seattle)', y='Cumulative Points per Game', x='') + 
 	theme_bw() + 
 	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16)) 
 
@@ -215,17 +255,16 @@ analysisData[, today:=max(date), by='team']
 tmp = analysisData[date==today][order(-cumulative_mean_points)]
 tmp[, rank:=seq(.N)]
 best = tmp[rank<=5]$team
-p3 = ggplot(analysisData[game_number>minGames & team %in% best], aes(y=cumulative_mean_points, x=date, color=team, group=team)) + 
+p3 = ggplot(analysisData[team %in% best], aes(y=cumulative_mean_points, x=date, color=team, group=team)) + 
 	geom_line(size=1.2) + 
 	geom_text(data=teamLabels[team %in% best], aes(label=team, y=cumulative_mean_points, x=date), size=5, color='grey20') + 
 	scale_color_manual('Ranking', values=teamColors) + 
-	labs(title='Best Team by Points\nBest 5 Teams', y='Cumulative Points per Game', x='') + 
+	labs(title='Team History\nBest 5 Teams', y='Cumulative Points per Game', x='') + 
 	theme_bw() + 
 	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16)) 
-	
-# graph over game number instead of date
-sfcGames = max(analysisData[team=='Seattle Sounders']$game_number)
 
+# graphs by game number
+	
 # reorder legends
 o = copy(analysisData)
 o[, now:=max(game_number), by='team']
@@ -234,18 +273,18 @@ o = o[order(-cumulative_mean_points)]
 analysisData[, team:=factor(team, o$team)]
 
 # graph west
-p4 = ggplot(analysisData[game_number>minGames & game_number<=sfcGames & conference=='West'], aes(y=cumulative_mean_points, x=game_number, color=team, group=team)) + 
+p4 = ggplot(analysisData[game_number<=sfcGames & conference=='West'], aes(y=cumulative_mean_points, x=game_number, color=team, group=team)) + 
 	geom_line(size=1.2) + 
 	scale_color_manual('Ranking', values=teamColors) + 
-	labs(title=paste('Best Team by Points in First', sfcGames, 'Games \nWestern Conference'), y='Cumulative Points per Game', x='Game Number') + 
+	labs(title=paste('Team History in First', sfcGames, 'Games \nWestern Conference'), y='Cumulative Points per Game', x='Game Number') + 
 	theme_bw() + 
 	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16)) 
 
 # graph east
-p5 = ggplot(analysisData[game_number>minGames & game_number<=sfcGames & (conference=='East' | team=='Seattle Sounders')], aes(y=cumulative_mean_points, x=game_number, color=team, group=team)) + 
+p5 = ggplot(analysisData[game_number<=sfcGames & (conference=='East' | team=='Seattle Sounders')], aes(y=cumulative_mean_points, x=game_number, color=team, group=team)) + 
 	geom_line(size=1.2) + 
 	scale_color_manual('Ranking', values=teamColors) + 
-	labs(title=paste('Best Team by Points in First', sfcGames, 'Games \nEastern Conference (plus Seattle)'), y='Cumulative Points per Game', x='Game Number') + 
+	labs(title=paste('Team History in First', sfcGames, 'Games \nEastern Conference (plus Seattle)'), y='Cumulative Points per Game', x='Game Number') + 
 	theme_bw() + 
 	theme(axis.title.y=element_text(size=14), axis.text.x=element_text(angle=315, hjust=0, size=14), plot.title=element_text(hjust=.5, size=16)) 
 
