@@ -31,6 +31,7 @@ convertTeamNamesASA = function(dt) {
 		tmp[tmpVar=='New York City FC', tmpVar:='nycfc']
 		tmp[tmpVar=='Minnesota United', tmpVar:='minnesota']
 		tmp[tmpVar=='Atlanta United', tmpVar:='atlanta']
+		tmp[tmpVar=='Los Angeles FC', tmpVar:='lafc']
 		tmp[, (var):=tmpVar]
 		tmp$tmpVar = NULL
 	}

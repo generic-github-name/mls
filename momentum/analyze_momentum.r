@@ -12,6 +12,7 @@ rm(list=ls())
 library(data.table)
 library(reshape2)
 library(stringr)
+library(np)
 library(RColorBrewer)
 library(ggplot2)
 # --------------------
@@ -109,11 +110,24 @@ for(t in unique(data$team_home)) {
 	tmpData[, ppg:=ifelse(home==TRUE, ppg_home, ppg_away)]
 	tmpData[, opponent_ppg:=ifelse(home==TRUE, ppg_away, ppg_home)]
 	tmpData = tmpData[, c('team','date','winner','home','opponent','goals','opponent_goals','ppg','opponent_ppg'), with=FALSE]
-	tmpData[, win:=team==winner]
+	tmpData[, win:=as.numeric(team==winner)]
 	
-	# "coming off a win" should be the main indicator
+	# identify current run of form (consecutive wins)
+	tmp_streaks = rle(as.character(tmpData$win))$lengths
+	streak_idx = seq(length(tmp_streaks))
+	streak_idx = rep(streak_idx, tmp_streaks)
+	
+	# identify the streak that they're currenly on, not the one they will ultimately reach
+	streak_distance = ave(streak_idx, streak_idx, FUN=seq_along)
+	tmpData[, current_run:=streak_distance]
+	tmpData[win==FALSE, current_run:=NA]
+	
+	# shift the streak to identify the streak that they went into the game with, not the one that resulted
+	tmpData[, current_run:=shift(current_run)]
+	
+	# "coming off a win" indicator
 	tmpData[, coming_off_win:=shift(winner==t)]
-	tmpData[, gap:=date-shift(date)]
+	tmpData[, gap:=as.numeric(date-shift(date))]
 	tmpData[gap>g, coming_off_win:=FALSE]
 	tmpData[is.na(coming_off_win), coming_off_win:=FALSE]
 
@@ -139,6 +153,11 @@ glmFit1 = glm(win ~ ppg + opponent_ppg + coming_off_win, 'binomial', analysisDat
 
 # whether previous_result effects odds of winning
 glmFit2 = glm(win ~ ppg + opponent_ppg + previous_result, 'binomial', analysisData)
+
+# whether having a long gap affects odds of continuing a streak
+glmFit3 = glm(win ~ ppg + opponent_ppg + gap, 'binomial', analysisData[current_run>3])
+npFit1 = npcdensbw(win ~ gap, data=analysisData[current_run>3])
+npFit2 = npconmode(win ~ gap, data=analysisData[current_run>3])
 # ----------------------------------------------------------------------------------
 
 
@@ -188,6 +207,15 @@ ggplot(cfData[ppg==hhome & opponent_ppg==saway], aes(y=1/odds, ymin=1/lower, yma
 	theme(axis.text.x=c(''))
 
 # line graph
-ggplot()
+# ggplot()
 
+# graph how gaps affect streaks in a non-parametric way
+plots = list()
+for(i in seq(7)) {
+	plots[[i]] = ggplot(analysisData[current_run>i & gap<25, mean(win), by='gap'], aes(y=V1, x=gap)) + 
+		geom_point() + 
+		geom_smooth() + 
+		labs(y='Probability of Win', x='Length of Rest', title=paste(i,'Games'))
+}
+grid.arrange(plots[[1]], plots[[2]], plots[[3]], plots[[4]], plots[[5]], plots[[6]], plots[[7]], top=textGrob('Length of Streak Going into the Game'))
 # ----------------------------------------------------------------------------------

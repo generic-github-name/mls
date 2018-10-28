@@ -2,6 +2,7 @@
 # Input: inName (character) : url name
 # Output: outname (character) : standard name
 convertTeamNamesRev = function(inName) { 
+	if (is.na(inName)) return(inName)
 	outname = NA
 	if(inName=='san-jose-earthquakes')	outname = 'san-jose'
 	if(inName=='columbus-crew-sc')	outname = 'columbus'

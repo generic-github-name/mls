@@ -27,5 +27,6 @@ convertTeamNames = function(inName) {
 	if(inName=='nycfc') outName='new-york-city-fc'
 	if(inName=='minnesota') outName='minnesota-united-fc'
 	if(inName=='atlanta') outName='atlanta-united-fc'
+	if(inName=='lafc') outName='los-angeles-football-club'
 	return(outName)
 }

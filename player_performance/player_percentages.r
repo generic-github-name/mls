@@ -21,6 +21,8 @@ inFilePasses2016 = './webscrape/ASA/2016/raw passes.csv'
 inFileDefense2016 = './webscrape/ASA/2016/raw defensive actions.csv'
 inFilePasses2017 = './webscrape/ASA/2017/raw passes.csv'
 inFileDefense2017 = './webscrape/ASA/2017/raw defensive actions.csv'
+inFilePasses2018 = './webscrape/ASA/2018/raw passes.csv'
+inFileDefense2018 = './webscrape/ASA/2018/raw defensive actions.csv'
 
 # output files
 graphFile = './player_performance/player_percentages.pdf'
@@ -37,6 +39,8 @@ passes2016 = fread(inFilePasses2016)
 defense2016 = fread(inFileDefense2016)
 passes2017 = fread(inFilePasses2017)
 defense2017 = fread(inFileDefense2017)
+passes2018 = fread(inFilePasses2018)
+defense2018 = fread(inFileDefense2018)
 
 # identify years
 passes2015[, year:=2015]
@@ -45,6 +49,8 @@ passes2016[, year:=2016]
 defense2016[, year:=2016]
 passes2017[, year:=2017]
 defense2017[, year:=2017]
+passes2018[, year:=2018]
+defense2018[, year:=2018]
 
 # identify actions
 passes2015[, action:='pass']
@@ -53,14 +59,18 @@ passes2016[, action:='pass']
 defense2016[, action:='defense']
 passes2017[, action:='pass']
 defense2017[, action:='defense']
+passes2018[, action:='pass']
+defense2018[, action:='defense']
 
 # rename
 setnames(passes2015, c('success','passer'), c('outcome','player'))
 setnames(passes2016, c('success','passer'), c('outcome','player'))
 setnames(passes2017, c('success','passer'), c('outcome','player'))
+setnames(passes2018, c('success','passer'), c('outcome','player'))
 
 # append
-data = rbind(passes2015, passes2016, passes2017, defense2015, defense2016, defense2017, fill=TRUE)
+data = rbind(passes2015, passes2016, passes2017, passes2018, 
+			defense2015, defense2016, defense2017, defense2018, fill=TRUE)
 # ----------------------------------------------
 
 
@@ -87,14 +97,17 @@ playerAggStrict = playerAgg[N_pass>250 & N_defense>50]
 # display rankings
 playerAgg[order(distance)][1:10]
 playerAggStrict[order(distance)][1:10]
-playerAggStrict[year==2017][order(distance)][1:10]
-playerAggStrict[year==2017][order(-pct_pass)][1:10]
-playerAggStrict[year==2017][order(-pct_defense)][1:10]
+playerAggStrict[year==2018, overall_rank_2018:=rank(distance)]
+playerAggStrict[year==2018, passing_rank_2018:=rank(-pct_pass)]
+playerAggStrict[year==2018, defense_rank_2018:=rank(-pct_defense)]
+playerAggStrict[year==2018][order(distance)][1:10]
+playerAggStrict[year==2018][order(-pct_pass)][1:10]
+playerAggStrict[year==2018][order(-pct_defense)][1:10]
 
 # look at rankings among "possession-based" teams
 teams = c('Kansas City', 'Atlanta United', 'New York City FC', 'New York', 'Seattle')
 playerAggStrict[, rank:=rank(distance)]
-playerAggStrict[team %in% teams][year==2017][order(-pct_defense)][1:10]
+playerAggStrict[team %in% teams][year==2018][order(-pct_defense)][1:10]
 # ---------------------------------
 
 
@@ -104,14 +117,14 @@ playerAggStrict[team %in% teams][year==2017][order(-pct_defense)][1:10]
 # colors
 cols = brewer.pal(6, 'Paired')
 
-# graph 2017 sounders
-meanya = mean(playerAgg[team=='Seattle' & year==2017]$pct_pass)
-meanxa = mean(playerAgg[team=='Seattle' & year==2017]$pct_defense)
+# graph 2018 sounders
+meanya = mean(playerAgg[team=='Seattle' & year==2018]$pct_pass)
+meanxa = mean(playerAgg[team=='Seattle' & year==2018]$pct_defense)
 texty1a=.865
 texty2a=.715
 textx1a=.85
 textx2a=.65
-ps2017 = ggplot(playerAgg[team=='Seattle' & year==2017], aes(y=pct_pass, x=pct_defense, size=N_pass)) + 
+ps2018 = ggplot(playerAgg[team=='Seattle' & year==2018], aes(y=pct_pass, x=pct_defense, size=N_pass)) + 
 	annotate('text', y=meanya, x=-Inf, label='Mean Passing Percentage', vjust=1, hjust=0, size=2.5) + 
 	annotate('text', y=-Inf, x=meanxa, label='Mean Defensive Percentage', vjust=1, hjust=0, size=2.5, angle=90) + 
 	annotate('text', y=texty1a, x=textx1a, label='Above Average\nIn Both', size=4, alpha=.35) + 
@@ -121,9 +134,9 @@ ps2017 = ggplot(playerAgg[team=='Seattle' & year==2017], aes(y=pct_pass, x=pct_d
 	geom_point(alpha=.5, color='#4f953b') + 
 	geom_hline(aes(yintercept=meanya)) + 
 	geom_vline(aes(xintercept=meanxa)) + 
-	geom_text(data=playerAgg[team=='Seattle' & year==2017 & (pct_pass>=meanya | pct_defense>=meanxa)], aes(label=player, size=NULL), size=2, vjust=1, hjust=1) + 
-	geom_text(data=playerAgg[team=='Seattle' & year==2017 & pct_pass<meanya & pct_defense<meanxa], aes(label=player, size=NULL), size=2, vjust=0, hjust=0) + 
-	labs(title='2017 Sounders', y='Passing Percentage', x='Defensive Action Success Percentage', size='Total Number\nof Passes') + 
+	geom_text(data=playerAgg[team=='Seattle' & year==2018 & (pct_pass>=meanya | pct_defense>=meanxa)], aes(label=player, size=NULL), size=4, vjust=1, hjust=1) + 
+	geom_text(data=playerAgg[team=='Seattle' & year==2018 & pct_pass<meanya & pct_defense<meanxa], aes(label=player, size=NULL), size=4, vjust=0, hjust=0) + 
+	labs(title='2018 Sounders', y='Passing Percentage', x='Defensive Action Success Percentage', size='Total Number\nof Passes') + 
 	theme_bw() + 
 	theme(axis.title.y=element_text(size=14), axis.title.x=element_text(size=14), plot.title=element_text(hjust=.5, size=16))
 
@@ -143,20 +156,20 @@ ptop10 = ggplot(playerAggStrict[distance<.06], aes(y=pct_pass, x=pct_defense, si
 	geom_point(alpha=.5, color='#bd1550') + 
 	geom_hline(aes(yintercept=meanyb)) + 
 	geom_vline(aes(xintercept=meanxb)) + 
-	geom_text(data=playerAggStrict[distance<.06 & pct_defense>=meanxb], aes(label=paste(player, year), size=NULL), size=2, vjust=1, hjust=1) + 
-	geom_text(data=playerAggStrict[distance<.06 & pct_defense<meanxb], aes(label=paste(player, year), size=NULL), size=2, vjust=0, hjust=0) + 
+	geom_text(data=playerAggStrict[distance<.06 & pct_defense>=meanxb], aes(label=paste(player, year), size=NULL), size=4, vjust=1, hjust=1) + 
+	geom_text(data=playerAggStrict[distance<.06 & pct_defense<meanxb], aes(label=paste(player, year), size=NULL), size=4, vjust=0, hjust=0) + 
 	labs(title='Top Players in Last 3 Years', y='Passing Percentage', x='Defensive Action Success Percentage', size='Total Number\nof Passes', caption='Among players with >250 total passes and >50 total defensive actions') + 
 	theme_bw() + 
 	theme(axis.title.y=element_text(size=14), axis.title.x=element_text(size=14), plot.title=element_text(hjust=.5, size=16), plot.caption=element_text(size=7))
 
-# best 10 players in 2017
-meanyc = mean(playerAgg[distance<.09 & year==2017]$pct_pass)
-meanxc = mean(playerAgg[distance<.09 & year==2017]$pct_defense)
+# best 10 players in 2018
+meanyc = mean(playerAgg[distance<.09 & year==2018]$pct_pass)
+meanxc = mean(playerAgg[distance<.09 & year==2018]$pct_defense)
 texty1c=.89
 texty2c=.821
 textx1c=.905
 textx2c=.845
-ptop10_2017 = ggplot(playerAgg[distance<.09 & year==2017], aes(y=pct_pass, x=pct_defense, size=N_pass)) + 
+ptop10_2018 = ggplot(playerAgg[distance<.09 & year==2018], aes(y=pct_pass, x=pct_defense, size=N_pass)) + 
 	annotate('text', y=meanyc, x=-Inf, label='Mean Passing Percentage', vjust=1, hjust=0, size=2.5) + 
 	annotate('text', y=-Inf, x=meanxc, label='Mean Defensive Percentage', vjust=1, hjust=0, size=2.5, angle=90) + 
 	annotate('text', y=texty1c, x=textx1c, label='Above Average\nIn Both', size=4, alpha=.35) + 
@@ -166,19 +179,19 @@ ptop10_2017 = ggplot(playerAgg[distance<.09 & year==2017], aes(y=pct_pass, x=pct
 	geom_point(alpha=.5, color='#005f6b') + 
 	geom_hline(aes(yintercept=meanyc)) + 
 	geom_vline(aes(xintercept=meanxc)) + 
-	geom_text(data=playerAgg[distance<.09 & pct_defense>=meanxc & year==2017], aes(label=player, size=NULL), size=2, vjust=1, hjust=1) + 
-	geom_text(data=playerAgg[distance<.09 & pct_defense<meanxc & year==2017], aes(label=player, size=NULL), size=2, vjust=0, hjust=0) + 
-	labs(title='Top Players in 2017', y='Passing Percentage', x='Defensive Action Success Percentage', size='Total Number\nof Passes', caption='Among players with >50 total passes and >10 total defensive actions') + 
+	geom_text(data=playerAgg[distance<.09 & pct_defense>=meanxc & year==2018], aes(label=player, size=NULL), size=4, vjust=1, hjust=1) + 
+	geom_text(data=playerAgg[distance<.09 & pct_defense<meanxc & year==2018], aes(label=player, size=NULL), size=4, vjust=0, hjust=0) + 
+	labs(title='Top Players in 2018', y='Passing Percentage', x='Defensive Action Success Percentage', size='Total Number\nof Passes', caption='Among players with >50 total passes and >10 total defensive actions') + 
 	theme_bw() + 
-	theme(axis.title.y=element_text(size=14), axis.title.x=element_text(size=14), plot.title=element_text(hjust=.5, size=16), plot.caption=element_text(size=7))
+	theme(axis.title.y=element_text(size=14), axis.title.x=element_text(size=14), plot.title=element_text(hjust=.5, size=16), plot.caption=element_text(size=8))
 # ----------------------------------------------
 
 
 # --------------------------------
 # Save graphs
 pdf(graphFile, height=6, width=9)
-ps2017
+ps2018
 ptop10
-ptop10_2017
+ptop10_2018
 dev.off()
 # --------------------------------
