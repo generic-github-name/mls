@@ -66,7 +66,7 @@ previewScraper = function(th, ta, date) {
 		html_text()
 	
 	# skip if there is nothing
-	if (length(absences_scr)>0) { 
+	if (length(absences_scr)==0) { 
 		print(paste('Returning NULL from', url, ':'))
 		print(absences_scr)
 		return(NULL)
@@ -89,7 +89,8 @@ previewScraper = function(th, ta, date) {
 	
 	# other categories that could be listed but we don't really want
 	extras = c('suspended next yellow card:', 'suspended after two yellow cards:', 
-			'suspended after next caution:', 'suspended next yellow:', 'warnings:')
+			'suspended after next caution:', 'suspended next yellow:', 'warnings:', 
+			'warnings :')
 	
 	# deal with lack of return characters by keying in on parentheses
 	fullline = absences[nrow(absences)]$absences_scr
@@ -232,23 +233,33 @@ previewScraper = function(th, ta, date) {
 	absences = cbind(players, reasons)
 	absences[, reason:=gsub(')', '', reason)]
 	
+	# squish whitespace
+	absences[, player:=str_squish(player)]
+	
 	# sub out team names and statuses from player names
 	absences[, reason:=str_trim(reason)]
 	absences[, player:=str_trim(player)]
-	teams = c('sea:', 'ny: ', 'clb:', 'mtl:', 'chv:', 'chi:', 'col:', 'dc: ', 'van:', 'kc: ', 'ne: ', 'dal:', 'hou:', 'sj: ', 'por:', 'phi:', 'rsl:', 'tor:', 'la: ', 'orl:', 'nyc:', 'nyr:', 'ny:')
+	teams = c('sea:', 'ny: ', 'clb:', 'mtl:', 'chv:', 'chi:', 
+			'col:', 'dc: ', 'van:', 'kc: ', 'ne: ', 'dal:', 'hou:', 
+			'sj: ', 'por:', 'phi:', 'rsl:', 'tor:', 'la: ', 'orl:', 
+			'nyc:', 'nyr:', 'ny:')
 	statuses_nodashes = c('out','questionable','doubtful','warnings')
-	punctuations = c(':', ' --', ',', '- ', ' - ', ' – ', '/', '\u2010', ' \u2010',
-		'\u2011', ' \u2011', '\u2012', ' \u2012', '\u2013', ' \u2013', '\u2014', ' \u2014', 
-		'\u002D', ' \u002D', '\u1806', ' \u1806', '\ufe58', ' \ufe58', '\u2015', ' \u2015')
+	punctuations = c(':', ' --', ',', '- ', ' - ', ' – ', '/', '–', ' –',
+		'\u2010', ' \u2010', '\u2011', ' \u2011', '\u2012', ' \u2012', '\u2013', 
+		' \u2013', '\u2014', ' \u2014', '\u002D', ' \u002D', '\u1806', ' \u1806', 
+		'\ufe58', ' \ufe58', '\u2015', ' \u2015', '\uff0D', ' \uff0D')
 	statuses = apply(expand.grid(statuses_nodashes, punctuations), 1, paste, collapse='')
 	for(t in c(teams,statuses)) {
 		absences[, player:=gsub(t, '', player)]
 		absences[, player:=gsub(paste0(' ', t), '', player)]
-	}		
+	}
+	for(s in statuses_nodashes) { 
+		absences[str_sub(player,1,nchar(s)+1)==paste0(s,' '), player:=str_sub(player,nchar(s)+1)]
+	}
 	
 	# remove position listings with hypthens or without
 	absences[, player:=str_trim(player)]
-	positions_nodashes = c('g', 'gk', 'k', 'd', 'd/m', 'm', 'f', 'mf', 'df/mf', 'fw', 'w')
+	positions_nodashes = c('g', 'gk', 'k', 'd', 'd/m', 'm', 'f', 'mf', 'df/mf', 'fw', 'w', 'df')
 	positions = apply(expand.grid(positions_nodashes, punctuations), 1, paste, collapse='')
 	for(p in positions) absences[, player:=gsub(p, '', player)]
 	for(p in positions_nodashes) { 
@@ -257,20 +268,27 @@ previewScraper = function(th, ta, date) {
 	absences[, player:=str_trim(player)]
 		
 	# remove miscellaneous other invalid characters
-	misc = c('…','\\.','=--','none\\"\\"','c\\"\\"',' , NA',',NA','cNA,','\\"\\"',' \\*')
+	misc = c('…','\\.','=--','none\\"\\"','c\\"\\"',' , NA',',NA',
+		'cNA,','\\"\\"',' \\*', 'c\\"', '\\"', ',', '--', '|','=-', '=',
+		'\"\"')
 	for(m in misc) {
-		absences[,player:=gsub(m,'',player)]
-		absences[,reason:=gsub(m,'',reason)]
+		absences[, player:=gsub(m,'',player)]
+		absences[, reason:=gsub(m,'',reason)]
 		absences[, reason:=str_trim(reason)]
 		absences[, player:=str_trim(player)]
 	}
 	
 	# drop empty fields and duplicates
 	absences = absences[player!='none']
+	absences[grepl('none',player) & length(player)>4, player:=gsub('none','',player)]
 	absences$index = NULL
 	absences = unique(absences)
 	keepVars = c('hteam', 'ateam', 'date', 'explanation', 'status', 'player', 'reason')
 	absences = absences[, keepVars, with=FALSE]
+	
+	# squish whitespace again
+	absences[, player:=str_squish(player)]
+	absences[, reason:=str_squish(reason)]
 	# ------------------------------------------------------------
 	
 	# ----------------

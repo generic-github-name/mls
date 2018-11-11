@@ -22,6 +22,12 @@ inFile = './webscrape/all_matches_in_mls_website.csv'
 asaFile2017 = './webscrape/ASA/2017/Game Information.csv'
 asaFile2018 = './webscrape/ASA/2018/Game Information.csv'
 
+# files with players' names
+lineupFile2015 = './webscrape/ASA/2018/Starting Lineups.csv'
+lineupFile2016 = './webscrape/ASA/2018/Starting Lineups.csv'
+lineupFile2017 = './webscrape/ASA/2018/Starting Lineups.csv'
+lineupFile2018 = './webscrape/ASA/2018/Starting Lineups.csv'
+
 # output file
 outFile = './webscrape/absences_for_every_match.csv'
 
@@ -35,7 +41,7 @@ today = Sys.Date()
 source('./_common/convert_to_url_names.r')
 source('./_common/convert_from_url_names.r')
 source('./_common/convert_from_asa_names.r')
-source('./webscrape/preview_scaper_function.r')
+source('./webscrape/preview_scraper_function.r')
 # -----------------------------------------------------------------------------
 
 
@@ -134,7 +140,7 @@ for(cid in ids) {
 
 
 # ---------------------------------------------------------------------------------
-# Clean up and save
+# Clean up
 
 # drop duplicates
 all_matches = unique(all_matches)
@@ -152,6 +158,24 @@ for(t in unique(all_matches$hteam)) {
 		all_matches[get(v)==t, (v):=st]
 	}
 }
+
+# screen out any errors based on length of player name
+lineups2015 = fread(lineupFile2015, fill=TRUE)
+lineups2016 = fread(lineupFile2016, fill=TRUE)
+lineups2017 = fread(lineupFile2017, fill=TRUE)
+lineups2018 = fread(lineupFile2018, fill=TRUE)
+lineups = rbind(lineups2018, lineups2017)
+lineups = rbind(lineups, lineups2016)
+lineups = rbind(lineups, lineups2015)
+lineups = melt(lineups, id.vars=c('gameID','team','home','formation'))
+lineups[, length:=nchar(value)]
+maxLength = max(lineups$length)+5
+all_matches = all_matches[nchar(player)<=maxLength]
+# ---------------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------------
+# Save
 
 # archive old data
 archiveFile = gsub('.csv', paste0(today, '.csv'), outFile)
