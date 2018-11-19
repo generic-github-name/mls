@@ -22,7 +22,7 @@ library(ggplot2)
 # Parameters
 
 # size of a gap in games that constitutes a break in momentum (days)
-g = 10
+g = 8
 # --------------------------------------------------------
 
 
