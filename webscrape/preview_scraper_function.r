@@ -97,11 +97,23 @@ previewScraper = function(th, ta, date) {
 	for(e in c(explanations,extras)) { 
 		everythingbefore = data.table(absences_scr=sub(paste0(e,'.*'),'\\1', fullline))
 		everythingafter = data.table(absences_scr=sub(paste0('.*(',e,')'),'\\1', fullline))
-		absences = rbind(absences, everythingbefore)
-		absences = rbind(absences, everythingafter)
+		absences = rbind(absences, everythingbefore, fill=TRUE)
+		absences = rbind(absences, everythingafter, fill=TRUE)
 	}
 	absences = unique(absences)
 	absences = absences[absences_scr!='']
+	
+	# assume that the first appearance of each explanation is the home team
+	for(e in explanations) absences[grepl(e,absences_scr), team_number:=seq_len(.N)]
+	absences[team_number==1, team:=th]
+	absences[team_number==2, team:=ta]
+	if (any(!absences$team_number %in% c(1,2))) {
+		print(paste('Warning:', url, 'appears to have repeated explanations'))
+		tmp = copy(absences)
+		tmp[, absences_scr:=str_sub(absences_scr,1,50)]
+		print(tmp)
+	}
+	absences$team_number = NULL
 	
 	# skip if there is nothing left
 	if (nrow(absences)<1) { 
@@ -179,7 +191,7 @@ previewScraper = function(th, ta, date) {
 	
 	# reshape out/questionable long
 	absences$absences_scr = NULL
-	absences = melt(absences, id.vars=c('hteam','ateam','date','explanation'), 
+	absences = melt(absences, id.vars=c('team','hteam','ateam','date','explanation'), 
 		variable.name='status', value.name='players')
 	
 	# split players into separate columns
@@ -212,7 +224,7 @@ previewScraper = function(th, ta, date) {
 	absences$players = NULL
 	
 	# melt players long
-	absences = melt(absences, id.vars=c('hteam','ateam','date','explanation','status'))
+	absences = melt(absences, id.vars=c('team','hteam','ateam','date','explanation','status'))
 	absences = absences[!is.na(value)]
 	# ------------------------------------------------------------
 	
@@ -259,7 +271,7 @@ previewScraper = function(th, ta, date) {
 	
 	# remove position listings with hypthens or without
 	absences[, player:=str_trim(player)]
-	positions_nodashes = c('g', 'gk', 'k', 'd', 'd/m', 'm', 'f', 'mf', 'df/mf', 'fw', 'w', 'df')
+	positions_nodashes = c('g', 'gk', 'k', 'd', 'd/m', 'm', 'f', 'mf', 'df/mf', 'fw', 'w', 'df', 'dmf')
 	positions = apply(expand.grid(positions_nodashes, punctuations), 1, paste, collapse='')
 	for(p in positions) absences[, player:=gsub(p, '', player)]
 	for(p in positions_nodashes) { 
@@ -283,13 +295,14 @@ previewScraper = function(th, ta, date) {
 	absences[grepl('none',player) & length(player)>4, player:=gsub('none','',player)]
 	absences$index = NULL
 	absences = unique(absences)
-	keepVars = c('hteam', 'ateam', 'date', 'explanation', 'status', 'player', 'reason')
+	keepVars = c('team', 'hteam', 'ateam', 'date', 'explanation', 'status', 'player', 'reason')
 	absences = absences[, keepVars, with=FALSE]
 	
 	# squish whitespace again
 	absences[, player:=str_squish(player)]
 	absences[, reason:=str_squish(reason)]
 	# ------------------------------------------------------------
+
 	
 	# ----------------
 	# Return the data
