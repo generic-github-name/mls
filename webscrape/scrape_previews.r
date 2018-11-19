@@ -23,9 +23,9 @@ asaFile2017 = './webscrape/ASA/2017/Game Information.csv'
 asaFile2018 = './webscrape/ASA/2018/Game Information.csv'
 
 # files with players' names
-lineupFile2015 = './webscrape/ASA/2018/Starting Lineups.csv'
-lineupFile2016 = './webscrape/ASA/2018/Starting Lineups.csv'
-lineupFile2017 = './webscrape/ASA/2018/Starting Lineups.csv'
+lineupFile2015 = './webscrape/ASA/2015/Starting Lineups.csv'
+lineupFile2016 = './webscrape/ASA/2016/Starting Lineups.csv'
+lineupFile2017 = './webscrape/ASA/2017/Starting Lineups.csv'
 lineupFile2018 = './webscrape/ASA/2018/Starting Lineups.csv'
 
 # output file
@@ -152,14 +152,19 @@ all_matches = all_matches[order(hteam, ateam)]
 
 # convert names back
 for(t in unique(all_matches$hteam)) {
-	for(v in c('hteam','ateam')) {
+	for(v in c('team','hteam','ateam')) {
 		st = convertTeamNamesRev(t)
 		if(is.na(t) | is.na(st)) next
 		all_matches[get(v)==t, (v):=st]
 	}
 }
+# ---------------------------------------------------------------------------------
 
-# screen out any errors based on length of player name
+
+# ---------------------------------------------------------------------------------
+# Work with player names
+
+# screen out errors based on length of player name
 lineups2015 = fread(lineupFile2015, fill=TRUE)
 lineups2016 = fread(lineupFile2016, fill=TRUE)
 lineups2017 = fread(lineupFile2017, fill=TRUE)
@@ -167,8 +172,8 @@ lineups2018 = fread(lineupFile2018, fill=TRUE)
 lineups = rbind(lineups2018, lineups2017)
 lineups = rbind(lineups, lineups2016)
 lineups = rbind(lineups, lineups2015)
-lineups = melt(lineups, id.vars=c('gameID','team','home','formation'))
-lineups[, length:=nchar(value)]
+lineups = melt(lineups, id.vars=c('gameID','team','home','formation'), value.name='player')
+lineups[, length:=nchar(player)]
 maxLength = max(lineups$length)+5
 all_matches = all_matches[nchar(player)<=maxLength]
 # ---------------------------------------------------------------------------------
