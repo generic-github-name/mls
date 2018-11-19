@@ -33,7 +33,7 @@ resultsFile2017 = './webscrape/ASA/2017/Game Information.csv'
 resultsFile2018 = './webscrape/ASA/2018/Game Information.csv'
 
 # output files
-graphFile = './strength_of_schedule/strength_of_schedule.pdf'
+graphFile = './short_rest/short_rest.pdf'
 
 # functions
 source('./_common/formalize_team_names.r')
@@ -90,23 +90,59 @@ for(t in unique(c(results$ateam, results$hteam))) {
 		i=i+1
 	}
 }
+results = results[!is.na(home_rest)]
 results[, home_short_rest:=home_rest<5]
 results[, away_short_rest:=away_rest<5]
+
+# exclude rest >31 days because that's just carryover from the previous season
+results = results[home_rest<31]
 
 # identify wins
 results[, home_win:=ifelse(points_home==3,1,0)]
 results[, away_win:=ifelse(points_away==3,1,0)]
+# ----------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------
+# Analysis 
 
 # glm
-fith = glm(home_win~home_rest+I(home_rest^2)+I(home_rest^3), data=results, family='binomial')
-fita = glm(away_win~away_rest+I(away_rest^2)+I(away_rest^3), data=results, family='binomial')
+fith = glm(home_win~home_rest, data=results, family='binomial')
+fita = glm(away_win~away_rest, data=results, family='binomial')
 
-# non-parametric options
-# fit = npcdensbw(formula=factor(home_win)~home_rest, data=results)
-# fit = npconmode(home_win~home_rest, data=results)
+# changepoint detection on the home team 
+# This is my broke-ass version of DA Stephens introduction to Bayesian changepoint detection in 1994 (App. Stat.) and
+# Paul Fearnhead Exact and efficient Bayesian inference for multiple changepoint problems, Stat Comput (2006)
+j=1
+for(i in seq(from=min(results$home_rest)+1, to=22)) { 
+	fit = glm(home_win~home_rest, data=results[home_rest<i], family='binomial')
+	tmp = data.table(window_start=min(results$home_rest), window_end=i, 
+		coef=names(coef(fit)), coef(fit), confint(fit), type='Too Short Rest')
+	if(j==1) coefs = copy(tmp)
+	if(j>1) coefs = rbind(coefs, tmp)
+	j=j+1
+}
+for(i in seq(from=min(results$home_rest)+1, to=21)) { 
+	fit = glm(home_win~home_rest, data=results[home_rest>i], family='binomial')
+	tmp = data.table(window_start=i, window_end=max(results$home_rest), 
+		coef=names(coef(fit)), coef(fit), confint(fit), type='Too Long Rest')
+	coefs = rbind(coefs, tmp)
+}
+setnames(coefs, c('window_start','window_end','coef','est','lower','upper','type'))
+
+# spline with cutpoints at 5 and 15 (the most likely cutpoints according to above)
+results[, s1:=(home_rest>=5)*home_rest]
+results[, s2:=(home_rest>=15)*home_rest]
+fith_spline = glm(home_win~home_rest+s1+s2, data=results, family='binomial')
+# ----------------------------------------------------------------------
+
+
+
+# -----------------------------------------------------------------------------
+# Graph
 
 # evaluate home rest
-evalh = data.table(home_rest=seq(2,15))
+evalh = data.table(home_rest=seq(2,30))
 evalh = evalh[, away_rest:=mean(results$away_rest, na.rm=TRUE)]
 evalh[, prediction:=predict(fith, newdata=evalh)]
 evalh[, se:=predict(fith, newdata=evalh, se.fit=TRUE)$se.fit]
@@ -118,12 +154,12 @@ evalh[, lower:=inv.logit(lower)]
 p1 = ggplot(evalh, aes(y=prediction, x=home_rest, ymin=lower, ymax=upper)) + 
 	geom_ribbon(fill='grey75') + 
 	geom_line() + 
-	geom_point(data=results[home_rest<=15, .(home_win=mean(home_win)), by=home_rest], aes(y=home_win, x=home_rest), inherit.aes=FALSE) + 
-	labs(title='Away Team', y='Win Percentage', x='Days of Rest') +
+	geom_point(data=results[home_rest<=30, .(home_win=mean(home_win)), by=home_rest], aes(y=home_win, x=home_rest), inherit.aes=FALSE) + 
+	labs(title='Home Team', y='Win Percentage', x='Days of Rest') +
 	theme_bw()
 	
 # evaluate away rest
-evala = data.table(away_rest=seq(2,15))
+evala = data.table(away_rest=seq(2,30))
 evala = evala[,home_rest:=mean(results$home_rest, na.rm=TRUE)]
 evala[, prediction:=predict(fita, newdata=evala)]
 evala[, se:=predict(fita, newdata=evala, se.fit=TRUE)$se.fit]
@@ -135,11 +171,51 @@ evala[, lower:=inv.logit(lower)]
 p2 = ggplot(evala, aes(y=prediction, x=away_rest, ymin=lower, ymax=upper)) + 
 	geom_ribbon(fill='grey75') + 
 	geom_line() + 
-	geom_point(data=results[away_rest<=15, .(away_win=mean(away_win)), by=away_rest], aes(y=away_win, x=away_rest), inherit.aes=FALSE) + 
+	geom_point(data=results[away_rest<=30, .(away_win=mean(away_win)), by=away_rest], aes(y=away_win, x=away_rest), inherit.aes=FALSE) + 
 	labs(title='Away Team', y='Win Percentage', x='Days of Rest') +
 	theme_bw()
 	
 # combine
 grid.arrange(p1, p2)
 
-
+# graph changepoint results
+p3 = ggplot(coefs[coef=='home_rest' & type=='Too Short Rest'], aes(y=est, x=window_end, ymax=upper, ymin=lower)) + 
+	geom_pointrange() + 
+	geom_hline(yintercept=0, color='red') +
+	labs(title='Slope with different degrees of short rest', y='Coefficient (expected win percentage)', x='End of window') + 
+	theme_bw()
+	
+# graph changepoint results
+p4 = ggplot(coefs[coef=='home_rest' & type=='Too Long Rest'], aes(y=est, x=window_start, ymax=upper, ymin=lower)) + 
+	geom_pointrange() + 
+	geom_hline(yintercept=0, color='red') +
+	labs(title='Slope with different degrees of long rest', y='Coefficient (expected win percentage)', x='Start of window') + 
+	theme_bw()
+	
+# graph showing the selected changepoints
+p5 = ggplot(results[home_rest<=5, .(home_win=mean(home_win)), by=home_rest], aes(y=home_win, x=home_rest)) + 
+	geom_point() + 
+	geom_smooth(method='lm') + 
+	geom_point(data=results[home_rest>=5 & home_rest<=15, .(home_win=mean(home_win)), by=home_rest]) + 
+	geom_smooth(method='lm', data=results[home_rest>=5 & home_rest<=15, .(home_win=mean(home_win)), by=home_rest]) + 
+	theme_bw()
+	
+# fuck it, just show a loess
+aggh = results[home_rest<=14 & home_rest>=2, .(home_win=mean(home_win), N=.N), by=home_rest]
+agga =results[away_rest<=14 & away_rest>=2, .(away_win=mean(away_win), N=.N), by=away_rest]
+p6 = ggplot(aggh, aes(y=home_win, x=home_rest, size=N)) + 
+	geom_point() + 
+	geom_smooth(aes(weight=N), show.legend=FALSE) + 
+	scale_x_continuous(breaks=seq(3,16, by=2)) + 
+	labs(title='Win Percentage Compared to Duration of Rest', subtitle='Home Teams Only', 
+		y='Average Win Percentage', x='Days of Rest', size='Number of Games\nSince 2015') + 
+	theme_bw()
+p7 = ggplot(agga, aes(y=away_win, x=away_rest, size=N)) + 
+	geom_point() + 
+	geom_smooth(aes(weight=N), show.legend=FALSE) + 
+	scale_x_continuous(breaks=seq(2,16, by=2)) + 
+	labs(title='Win Percentage Compared to Duration of Rest', subtitle='Away Teams Only', 
+		y='Average Win Percentage', x='Days of Rest', size='Number of Games\nSince 2015') + 
+	theme_bw()
+	
+# -----------------------------------------------------------------------------
