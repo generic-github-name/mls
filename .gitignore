@@ -7,3 +7,4 @@
 *.rdata
 *rds
 *.gdoc
+/webscrape/ASA/*
